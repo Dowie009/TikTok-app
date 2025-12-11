@@ -77,7 +77,7 @@ def connect_to_gsheets():
         return None
 
 def load_data_from_sheet(sheet):
-    """シートからデータを読み込み"""
+    """シートからデータを読み込み（土日を自動除外）"""
     if sheet is None:
         return None
     try:
@@ -85,9 +85,17 @@ def load_data_from_sheet(sheet):
         if not data:
             return None
         df = pd.DataFrame(data)
+        
         # カラム名を統一（台本 → 台本メモ）
         if "台本" in df.columns and "台本メモ" not in df.columns:
             df = df.rename(columns={"台本": "台本メモ"})
+        
+        # 土日を除外（曜日列を確認）
+        df = df[~df["曜日"].isin(["(土)", "(日)"])].reset_index(drop=True)
+        
+        # No列を振り直し
+        df["No"] = range(1, len(df) + 1)
+        
         return df
     except Exception as e:
         st.warning(f"データ読み込みエラー: {e}")
@@ -136,7 +144,7 @@ def calculate_stock_deadline(df):
     
     # 公開予定日を日付型に変換
     finished_df["日付"] = pd.to_datetime(finished_df["公開予定日"], format="%m/%d", errors='coerce')
-    finished_df["日付"] = finished_df["日付"].apply(lambda x: x.replace(year=datetime.now().year))
+    finished_df["日付"] = finished_df["日付"].apply(lambda x: x.replace(year=datetime.now().year) if pd.notna(x) else None)
     
     # 最も遅い公開予定日を取得
     max_date = finished_df["日付"].max()
@@ -159,11 +167,11 @@ with st.sidebar:
 sheet = connect_to_gsheets()
 
 if sheet is not None:
-    # シートからデータを読み込み
+    # シートからデータを読み込み（土日は自動除外）
     sheet_df = load_data_from_sheet(sheet)
     
     if sheet_df is not None and not sheet_df.empty:
-        # シートにデータがある場合
+        # シートにデータがある場合（土日は既に除外済み）
         st.session_state.notebook_df = sheet_df
     elif 'notebook_df' not in st.session_state:
         # 初回起動：新規データを生成（平日のみ）
