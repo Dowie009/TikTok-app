@@ -3,7 +3,7 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 import json
-from datetime import date, timedelta
+from datetime import datetime, timedelta
 
 # --- 1. アプリの設定 ---
 st.set_page_config(page_title="アニ無理 制作ノート", layout="wide", page_icon="☕")
@@ -112,12 +112,13 @@ def save_data_to_sheet(sheet, df):
 
 # --- 4. ロジック関数 ---
 def get_weekdays(start_date, end_date):
-    """開始日から終了日までの平日リストを生成"""
+    """開始日から終了日までの平日リストを生成（土日を除外）"""
     current = start_date
     weekdays = []
     jp_weekdays = ["(月)", "(火)", "(水)", "(木)", "(金)", "(土)", "(日)"]
     while current <= end_date:
-        if current.weekday() < 5:  # 平日のみ
+        # 土日を除外（0=月曜, 4=金曜, 5=土曜, 6=日曜）
+        if current.weekday() < 5:
             weekdays.append({
                 "date": current,
                 "wday_str": jp_weekdays[current.weekday()]
@@ -125,13 +126,34 @@ def get_weekdays(start_date, end_date):
         current += timedelta(days=1)
     return weekdays
 
+def calculate_stock_deadline(df):
+    """在庫状況から投稿可能日を計算"""
+    # 「撮影済」「UP済」のデータを抽出
+    finished_df = df[df["ステータス"].isin(["撮影済", "UP済"])].copy()
+    
+    if len(finished_df) == 0:
+        return None, "在庫なし", "撮影頑張りましょう！"
+    
+    # 公開予定日を日付型に変換
+    finished_df["日付"] = pd.to_datetime(finished_df["公開予定日"], format="%m/%d", errors='coerce')
+    finished_df["日付"] = finished_df["日付"].apply(lambda x: x.replace(year=datetime.now().year))
+    
+    # 最も遅い公開予定日を取得
+    max_date = finished_df["日付"].max()
+    max_row = finished_df[finished_df["日付"] == max_date].iloc[0]
+    
+    deadline_text = f"{max_row['公開予定日']} {max_row['曜日']} まで"
+    sub_text = "投稿可能！✨"
+    
+    return len(finished_df), deadline_text, sub_text
+
 # --- 5. メイン処理 ---
 st.title("☕️ アニ無理 制作ノート")
 
 with st.sidebar:
     st.header("⚙️ 設定")
-    start_date = st.date_input("開始日", date(2025, 12, 11))
-    target_end_date = date(2026, 2, 28)
+    start_date = st.date_input("開始日", datetime(2025, 12, 11))
+    target_end_date = datetime(2026, 2, 28)
 
 # --- 6. データ初期化・読み込み ---
 sheet = connect_to_gsheets()
@@ -144,7 +166,7 @@ if sheet is not None:
         # シートにデータがある場合
         st.session_state.notebook_df = sheet_df
     elif 'notebook_df' not in st.session_state:
-        # 初回起動：新規データを生成
+        # 初回起動：新規データを生成（平日のみ）
         days_data = get_weekdays(start_date, target_end_date)
         data = []
         for i, d in enumerate(days_data):
@@ -162,16 +184,11 @@ if sheet is not None:
 
     df = st.session_state.notebook_df
 
-    # --- 7. 管理指標ダッシュボード ---
-    finished_df = df[df["ステータス"].isin(["撮影済", "UP済"])]
-    finished_count = len(finished_df)
-
-    if finished_count > 0:
-        last_stock_date = finished_df["公開予定日"].max()
-        last_stock_wday = finished_df[finished_df["公開予定日"] == last_stock_date]["曜日"].iloc[0]
-        deadline_text = f"{last_stock_date} {last_stock_wday} まで"
-        sub_text = "投稿可能！✨"
-    else:
+    # --- 7. 管理指標ダッシュボード（自動計算） ---
+    finished_count, deadline_text, sub_text = calculate_stock_deadline(df)
+    
+    if finished_count is None:
+        finished_count = 0
         deadline_text = "在庫なし"
         sub_text = "撮影頑張りましょう！"
 
@@ -194,12 +211,13 @@ if sheet is not None:
 
     with col1:
         st.subheader("🗓 スケジュール帳")
+        st.caption("👇 土日は除外されています（平日のみ表示）")
         
         edited_df = st.data_editor(
             st.session_state.notebook_df,
             column_config={
                 "No": st.column_config.NumberColumn(width="small", disabled=True),
-                "公開予定日": st.column_config.TextColumn(width="small"),
+                "公開予定日": st.column_config.TextColumn(width="small", disabled=True),
                 "曜日": st.column_config.TextColumn(width="small", disabled=True),
                 "ステータス": st.column_config.SelectboxColumn(
                     options=["未", "台本完", "撮影済", "UP済"],
@@ -217,6 +235,7 @@ if sheet is not None:
         
         if not edited_df.equals(st.session_state.notebook_df):
             st.session_state.notebook_df = edited_df
+            st.rerun()
 
     with col2:
         st.subheader("🎬 台本を見る・書く")
@@ -247,6 +266,7 @@ if sheet is not None:
         if new_text != current_text:
             st.session_state.notebook_df.at[selected_index, "台本メモ"] = new_text
             st.toast(f"No.{selected_row['No']} の台本を更新しました！", icon="💾")
+            st.rerun()
 
     # --- 9. 保存ボタン ---
     st.divider()
