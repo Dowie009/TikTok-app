@@ -4,6 +4,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 import json
 from datetime import datetime, timedelta
+import time
 
 # --- 1. アプリの設定 ---
 st.set_page_config(page_title="アニ無理 制作ノート", layout="wide", page_icon="☕")
@@ -60,9 +61,10 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. スプレッドシート接続機能 ---
+# --- 3. スプレッドシート接続機能（キャッシュ付き） ---
+@st.cache_resource
 def connect_to_gsheets():
-    """Google Sheetsに接続"""
+    """Google Sheetsに接続（キャッシュで再利用）"""
     try:
         key_dict = json.loads(st.secrets["gcp"]["json_key"])
         creds = Credentials.from_service_account_info(key_dict, scopes=[
@@ -81,6 +83,9 @@ def load_data_from_sheet(sheet):
     if sheet is None:
         return None
     try:
+        # API制限を避けるため、少し待機
+        time.sleep(0.5)
+        
         data = sheet.get_all_records()
         if not data:
             return None
@@ -107,6 +112,9 @@ def save_data_to_sheet(sheet, df):
         st.error("シート接続がありません")
         return False
     try:
+        # API制限を避けるため、少し待機
+        time.sleep(0.5)
+        
         sheet.clear()
         # カラム名を統一（台本メモ → 台本）
         save_df = df.copy()
@@ -163,16 +171,21 @@ with st.sidebar:
     start_date = st.date_input("開始日", datetime(2025, 12, 11))
     target_end_date = datetime(2026, 2, 28)
 
-# --- 6. データ初期化・読み込み ---
+# --- 6. データ初期化・読み込み（初回のみシートから読み込み） ---
 sheet = connect_to_gsheets()
 
-if sheet is not None:
-    # シートからデータを読み込み（土日は自動除外）
+# セッション初期化時のみシートから読み込む
+if 'data_loaded' not in st.session_state:
+    st.session_state.data_loaded = False
+
+if sheet is not None and not st.session_state.data_loaded:
+    # シートからデータを読み込み（初回のみ）
     sheet_df = load_data_from_sheet(sheet)
     
     if sheet_df is not None and not sheet_df.empty:
         # シートにデータがある場合（土日は既に除外済み）
         st.session_state.notebook_df = sheet_df
+        st.session_state.data_loaded = True
     elif 'notebook_df' not in st.session_state:
         # 初回起動：新規データを生成（平日のみ）
         days_data = get_weekdays(start_date, target_end_date)
@@ -187,9 +200,11 @@ if sheet is not None:
                 "台本メモ": ""
             })
         st.session_state.notebook_df = pd.DataFrame(data)
+        st.session_state.data_loaded = True
         # 初期データをシートに保存
         save_data_to_sheet(sheet, st.session_state.notebook_df)
 
+if 'notebook_df' in st.session_state:
     df = st.session_state.notebook_df
 
     # --- 7. 管理指標ダッシュボード（自動計算） ---
@@ -241,16 +256,16 @@ if sheet is not None:
             key="data_editor"
         )
         
+        # データ変更時にセッションステートのみ更新（st.rerunを削除）
         if not edited_df.equals(st.session_state.notebook_df):
             st.session_state.notebook_df = edited_df
-            st.rerun()
 
     with col2:
         st.subheader("🎬 台本を見る・書く")
         st.info("👇 編集したい動画の日付を選んでください")
         
         options = []
-        for idx, row in edited_df.iterrows():
+        for idx, row in st.session_state.notebook_df.iterrows():
             display_title = row['タイトル'] if row['タイトル'] else "（タイトル未定）"
             status_mark = "✅" if row['ステータス'] in ["撮影済", "UP済"] else "📝"
             label = f"{status_mark} {row['公開予定日']} {row['曜日']} : {display_title}"
@@ -258,7 +273,7 @@ if sheet is not None:
         
         selected_label = st.selectbox("動画を選択", options)
         selected_index = options.index(selected_label)
-        selected_row = edited_df.iloc[selected_index]
+        selected_row = st.session_state.notebook_df.iloc[selected_index]
         
         st.markdown("---")
         st.write(f"**【 No.{selected_row['No']} 】** の台本")
@@ -268,13 +283,13 @@ if sheet is not None:
             "台本エディタ",
             value=current_text,
             height=450,
-            placeholder="ここに台詞や構成を記入..."
+            placeholder="ここに台詞や構成を記入...",
+            key=f"script_{selected_index}"
         )
         
         if new_text != current_text:
             st.session_state.notebook_df.at[selected_index, "台本メモ"] = new_text
             st.toast(f"No.{selected_row['No']} の台本を更新しました！", icon="💾")
-            st.rerun()
 
     # --- 9. 保存ボタン ---
     st.divider()
@@ -284,5 +299,5 @@ if sheet is not None:
                 st.success("✅ 保存しました！Tomomiさんにも共有されました✨")
                 st.balloons()
 else:
-    st.error("⚠️ Google Sheetsに接続できませんでした")
+    st.error("⚠️ データの初期化に失敗しました")
     st.info("Secrets設定を確認してください")
