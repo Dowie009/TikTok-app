@@ -63,29 +63,52 @@ st.markdown("""
 # --- 3. スプレッドシート接続機能 ---
 def connect_to_gsheets():
     """Google Sheetsに接続"""
-    key_dict = json.loads(st.secrets["gcp"]["json_key"])
-    creds = Credentials.from_service_account_info(key_dict, scopes=[
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
-    ])
-    client = gspread.authorize(creds)
-    sheet_url = st.secrets["SPREADSHEET_URL"]
-    return client.open_by_url(sheet_url).sheet1
+    try:
+        key_dict = json.loads(st.secrets["gcp"]["json_key"])
+        creds = Credentials.from_service_account_info(key_dict, scopes=[
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ])
+        client = gspread.authorize(creds)
+        sheet_url = st.secrets["SPREADSHEET_URL"]
+        return client.open_by_url(sheet_url).sheet1
+    except Exception as e:
+        st.error(f"Google Sheets接続エラー: {e}")
+        return None
 
 def load_data_from_sheet(sheet):
     """シートからデータを読み込み"""
+    if sheet is None:
+        return None
     try:
         data = sheet.get_all_records()
         if not data:
             return None
-        return pd.DataFrame(data)
-    except Exception:
+        df = pd.DataFrame(data)
+        # カラム名を統一（台本 → 台本メモ）
+        if "台本" in df.columns and "台本メモ" not in df.columns:
+            df = df.rename(columns={"台本": "台本メモ"})
+        return df
+    except Exception as e:
+        st.warning(f"データ読み込みエラー: {e}")
         return None
 
 def save_data_to_sheet(sheet, df):
     """データをシートに保存"""
-    sheet.clear()
-    sheet.update([df.columns.values.tolist()] + df.values.tolist())
+    if sheet is None:
+        st.error("シート接続がありません")
+        return False
+    try:
+        sheet.clear()
+        # カラム名を統一（台本メモ → 台本）
+        save_df = df.copy()
+        if "台本メモ" in save_df.columns:
+            save_df = save_df.rename(columns={"台本メモ": "台本"})
+        sheet.update([save_df.columns.values.tolist()] + save_df.values.tolist())
+        return True
+    except Exception as e:
+        st.error(f"保存エラー: {e}")
+        return False
 
 # --- 4. ロジック関数 ---
 def get_weekdays(start_date, end_date):
@@ -111,9 +134,9 @@ with st.sidebar:
     target_end_date = date(2026, 2, 28)
 
 # --- 6. データ初期化・読み込み ---
-try:
-    sheet = connect_to_gsheets()
-    
+sheet = connect_to_gsheets()
+
+if sheet is not None:
     # シートからデータを読み込み
     sheet_df = load_data_from_sheet(sheet)
     
@@ -229,10 +252,9 @@ try:
     st.divider()
     if st.button("💾 変更をスプレッドシートに保存する", type="primary", use_container_width=True):
         with st.spinner("保存中..."):
-            save_data_to_sheet(sheet, st.session_state.notebook_df)
-        st.success("✅ 保存しました！Tomomiさんにも共有されました✨")
-        st.balloons()
-
-except Exception as e:
-    st.error(f"エラーが発生しました: {e}")
-    st.info("設定（Secrets）が間違っているか、共有設定がうまくいっていない可能性があります。")
+            if save_data_to_sheet(sheet, st.session_state.notebook_df):
+                st.success("✅ 保存しました！Tomomiさんにも共有されました✨")
+                st.balloons()
+else:
+    st.error("⚠️ Google Sheetsに接続できませんでした")
+    st.info("Secrets設定を確認してください")
