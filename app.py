@@ -60,30 +60,17 @@ st.markdown("""
         border-radius: 4px;
     }
     
-    /* 台本プレビューエリア */
-    .script-preview {
-        background-color: #FFFAF0;
-        padding: 20px;
-        border-radius: 8px;
-        border: 2px solid #A1887F;
-        min-height: 200px;
-        font-family: "Hiragino Mincho ProN", "Yu Mincho", serif;
-        line-height: 1.8;
-        font-size: 16px;
-    }
-    
+    /* 色付きセリフのスタイル */
     .red-text {
-        color: #D32F2F;
-        font-weight: 500;
+        color: #E53935 !important;
+        font-weight: bold;
     }
-    
     .blue-text {
-        color: #1976D2;
-        font-weight: 500;
+        color: #1E88E5 !important;
+        font-weight: bold;
     }
-    
     .black-text {
-        color: #2C2C2C;
+        color: #212121 !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -144,46 +131,7 @@ def save_data_to_sheet(sheet, df):
         st.error(f"保存エラー: {e}")
         return False
 
-# --- 4. 台本の色付け処理 ---
-def format_script_with_colors(text):
-    """
-    台本テキストを色付きHTMLに変換
-    
-    記法：
-    赤：セリフ → 赤色
-    青：セリフ → 青色
-    黒：セリフ → 黒色
-    それ以外 → 通常の茶色
-    """
-    if not text:
-        return "<p>（台本がまだ入力されていません）</p>"
-    
-    lines = text.split('\n')
-    html_lines = []
-    
-    for line in lines:
-        # 赤色のパターン
-        if line.strip().startswith('赤：') or line.strip().startswith('赤:'):
-            content = re.sub(r'^赤[：:]', '', line.strip())
-            html_lines.append(f'<p class="red-text">{content}</p>')
-        # 青色のパターン
-        elif line.strip().startswith('青：') or line.strip().startswith('青:'):
-            content = re.sub(r'^青[：:]', '', line.strip())
-            html_lines.append(f'<p class="blue-text">{content}</p>')
-        # 黒色のパターン
-        elif line.strip().startswith('黒：') or line.strip().startswith('黒:'):
-            content = re.sub(r'^黒[：:]', '', line.strip())
-            html_lines.append(f'<p class="black-text">{content}</p>')
-        # 通常のテキスト
-        else:
-            if line.strip():
-                html_lines.append(f'<p>{line}</p>')
-            else:
-                html_lines.append('<p>&nbsp;</p>')
-    
-    return ''.join(html_lines)
-
-# --- 5. ロジック関数 ---
+# --- 4. ロジック関数 ---
 def get_weekdays(start_date, end_date):
     """開始日から終了日までの平日リストを生成（土日を除外）"""
     current = start_date
@@ -216,14 +164,41 @@ def calculate_stock_deadline(df):
     
     return len(finished_df), deadline_text, sub_text
 
-# --- 6. メイン処理 ---
+def colorize_script(script_text):
+    """台本テキストを色付きHTMLに変換（シンプル版）"""
+    if not script_text:
+        return ""
+    
+    lines = script_text.split('\n')
+    html_lines = []
+    
+    for line in lines:
+        # 赤：「」パターン
+        if line.strip().startswith('赤：'):
+            content = re.sub(r'^赤：', '', line.strip())
+            html_lines.append(f'<p class="red-text">赤：{content}</p>')
+        # 青：「」パターン
+        elif line.strip().startswith('青：'):
+            content = re.sub(r'^青：', '', line.strip())
+            html_lines.append(f'<p class="blue-text">青：{content}</p>')
+        # 黒：「」パターン
+        elif line.strip().startswith('黒：'):
+            content = re.sub(r'^黒：', '', line.strip())
+            html_lines.append(f'<p class="black-text">黒：{content}</p>')
+        # その他の行（通常表示）
+        else:
+            html_lines.append(f'<p class="black-text">{line}</p>')
+    
+    return ''.join(html_lines)
+
+# --- 5. メイン処理 ---
 st.title("☕️ アニ無理 制作ノート")
 
 # セッションステート初期化
 if 'selected_row_index' not in st.session_state:
     st.session_state.selected_row_index = 0
 if 'current_month' not in st.session_state:
-    st.session_state.current_month = 12
+    st.session_state.current_month = 12  # 12月から開始
 if 'current_year' not in st.session_state:
     st.session_state.current_year = 2025
 
@@ -235,45 +210,42 @@ with st.sidebar:
     col_prev, col_current, col_next = st.columns([1, 2, 1])
     
     with col_prev:
-        if st.button("◀", key="prev_month"):
+        if st.button("◀ 前月"):
             if st.session_state.current_month == 1:
                 st.session_state.current_month = 12
                 st.session_state.current_year -= 1
             else:
                 st.session_state.current_month -= 1
-            st.session_state.data_loaded = False
             st.rerun()
     
     with col_current:
-        st.markdown(f"### {st.session_state.current_year}年{st.session_state.current_month}月")
+        st.markdown(f"### {st.session_state.current_year}年 {st.session_state.current_month}月")
     
     with col_next:
-        if st.button("▶", key="next_month"):
+        if st.button("次月 ▶"):
             if st.session_state.current_month == 12:
                 st.session_state.current_month = 1
                 st.session_state.current_year += 1
             else:
                 st.session_state.current_month += 1
-            st.session_state.data_loaded = False
             st.rerun()
     
-    # 使い方ガイド
     st.divider()
-    st.subheader("📖 台本の色付け方法")
-    st.markdown("""
-    **色を付けるには行の先頭に：**
-    - `赤：セリフ` → <span style='color:#D32F2F'>赤色</span>
-    - `青：セリフ` → <span style='color:#1976D2'>青色</span>
-    - `黒：セリフ` → <span style='color:#2C2C2C'>黒色</span>
     
-    **例：**
-    ```
-    赤：Tomomi「こんにちは！」
-    青：Dowie009「今日も頑張ろう」
-    ```
-    """, unsafe_allow_html=True)
+    # 台本フォーマットガイド
+    st.subheader("📝 台本フォーマット")
+    st.markdown("""
+    **正しい書き方：**
+    - `赤：「Tomomiのセリフ」`
+    - `青：「Dowie009のセリフ」`
+    - `黒：「ナレーション」`
+    
+    **NGな書き方：**
+    - ~~`赤：Tomomi：「セリフ」`~~
+    - ~~`赤： 「セリフ」`~~
+    """)
 
-# --- 7. データ初期化・読み込み ---
+# --- 6. データ初期化・読み込み ---
 sheet = connect_to_gsheets()
 
 if 'data_loaded' not in st.session_state:
@@ -286,6 +258,7 @@ if sheet is not None and not st.session_state.data_loaded:
         st.session_state.notebook_df = sheet_df
         st.session_state.data_loaded = True
     elif 'notebook_df' not in st.session_state:
+        # 選択された月の平日データを生成
         start_date = datetime(st.session_state.current_year, st.session_state.current_month, 1)
         if st.session_state.current_month == 12:
             end_date = datetime(st.session_state.current_year + 1, 1, 1) - timedelta(days=1)
@@ -310,7 +283,7 @@ if sheet is not None and not st.session_state.data_loaded:
 if 'notebook_df' in st.session_state:
     df = st.session_state.notebook_df
 
-    # --- 8. 管理指標ダッシュボード ---
+    # --- 7. 管理指標ダッシュボード ---
     finished_count, deadline_text, sub_text = calculate_stock_deadline(df)
     
     if finished_count is None:
@@ -332,49 +305,58 @@ if 'notebook_df' in st.session_state:
 
     st.divider()
 
-    # --- 9. スケジュール一覧 & 台本機能 ---
-    col1, col2 = st.columns([1.2, 1.5])
+    # --- 8. スケジュール一覧 & 台本機能 ---
+    col1, col2 = st.columns([1.3, 1])
 
     with col1:
         st.subheader("🗓 スケジュール帳")
-        st.caption("👇 ラジオボタンで選択すると右側の台本が表示されます")
+        st.caption("👇 ラジオボタンで行を選択すると、右側の台本が切り替わります")
         
-        # ラジオボタンで行選択
-        radio_options = []
+        # ラジオボタンによる行選択
+        options = []
         for idx, row in st.session_state.notebook_df.iterrows():
             display_title = row['タイトル'] if row['タイトル'] else "（タイトル未定）"
             status_mark = "✅" if row['ステータス'] in ["撮影済", "UP済"] else "📝"
             label = f"No.{row['No']} | {row['公開予定日']} {row['曜日']} | {display_title}"
-            radio_options.append(label)
+            options.append(label)
         
-        selected_radio = st.radio(
-            "動画を選択",
-            radio_options,
+        selected_label = st.radio(
+            "台本を選択",
+            options,
             index=st.session_state.selected_row_index,
-            key="radio_selector",
+            key="row_selector",
             label_visibility="collapsed"
         )
         
-        new_index = radio_options.index(selected_radio)
-        if new_index != st.session_state.selected_row_index:
-            st.session_state.selected_row_index = new_index
-            st.rerun()
+        # 選択された行のインデックスを更新
+        if selected_label:
+            st.session_state.selected_row_index = options.index(selected_label)
         
         st.divider()
         
-        # データ編集エリア
-        st.caption("📝 選択した行の詳細編集")
-        selected_row = st.session_state.notebook_df.iloc[st.session_state.selected_row_index]
+        # データエディタ
+        edited_df = st.data_editor(
+            st.session_state.notebook_df,
+            column_config={
+                "No": st.column_config.NumberColumn(width="small", disabled=True),
+                "公開予定日": st.column_config.TextColumn(width="small", disabled=True),
+                "曜日": st.column_config.TextColumn(width="small", disabled=True),
+                "ステータス": st.column_config.SelectboxColumn(
+                    options=["未", "台本完", "撮影済", "UP済"],
+                    width="small",
+                    required=True
+                ),
+                "タイトル": st.column_config.TextColumn(width="medium"),
+                "台本メモ": st.column_config.TextColumn(width="small"),
+            },
+            use_container_width=True,
+            height=400,
+            hide_index=True,
+            key="data_editor"
+        )
         
-        new_title = st.text_input("タイトル", value=selected_row['タイトル'], key="edit_title")
-        new_status = st.selectbox("ステータス", ["未", "台本完", "撮影済", "UP済"], 
-                                  index=["未", "台本完", "撮影済", "UP済"].index(selected_row['ステータス']),
-                                  key="edit_status")
-        
-        if new_title != selected_row['タイトル']:
-            st.session_state.notebook_df.at[st.session_state.selected_row_index, 'タイトル'] = new_title
-        if new_status != selected_row['ステータス']:
-            st.session_state.notebook_df.at[st.session_state.selected_row_index, 'ステータス'] = new_status
+        if not edited_df.equals(st.session_state.notebook_df):
+            st.session_state.notebook_df = edited_df
 
     with col2:
         st.subheader("🎬 台本を見る・書く")
@@ -383,7 +365,7 @@ if 'notebook_df' in st.session_state:
         nav_col1, nav_col2, nav_col3 = st.columns([1, 2, 1])
         
         with nav_col1:
-            if st.button("⬅ 前へ", use_container_width=True, key="prev_script"):
+            if st.button("⬅ 前へ", use_container_width=True):
                 if st.session_state.selected_row_index > 0:
                     st.session_state.selected_row_index -= 1
                     st.rerun()
@@ -393,38 +375,50 @@ if 'notebook_df' in st.session_state:
             st.info(f"📅 {selected_row['公開予定日']} {selected_row['曜日']}")
         
         with nav_col3:
-            if st.button("次へ ➡", use_container_width=True, key="next_script"):
+            if st.button("次へ ➡", use_container_width=True):
                 if st.session_state.selected_row_index < len(st.session_state.notebook_df) - 1:
                     st.session_state.selected_row_index += 1
                     st.rerun()
         
         st.markdown("---")
+        st.write(f"**【 No.{selected_row['No']} 】** の台本")
         
-        # タブで編集モードとプレビューモードを切り替え
-        tab1, tab2 = st.tabs(["✏️ 編集", "👁️ プレビュー"])
+        # 台本エディタ
+        current_text = selected_row["台本メモ"]
         
-        with tab1:
-            st.write(f"**【 No.{selected_row['No']} 】** の台本を編集")
-            current_text = selected_row["台本メモ"]
+        new_text = st.text_area(
+            "台本エディタ（編集モード）",
+            value=current_text,
+            height=250,
+            placeholder="ここに台本を記入...\n\n例：\n赤：「こんにちは！」\n青：「よろしく！」\n黒：「【ナレーション】」",
+            key=f"script_{st.session_state.selected_row_index}"
+        )
+        
+        if new_text != current_text:
+            st.session_state.notebook_df.at[st.session_state.selected_row_index, "台本メモ"] = new_text
+            st.toast(f"No.{selected_row['No']} の台本を更新しました！", icon="💾")
+        
+        # プレビューボタン
+        if st.button("👁 プレビュー（色付き表示）", use_container_width=True):
+            st.session_state.show_preview = True
+        
+        # プレビュー表示
+        if 'show_preview' in st.session_state and st.session_state.show_preview:
+            st.markdown("---")
+            st.markdown("### 🎨 プレビュー")
             
-            new_text = st.text_area(
-                "台本エディタ",
-                value=current_text,
-                height=400,
-                placeholder="例：\n赤：Tomomi「こんにちは！」\n青：Dowie009「今日も頑張ろう」\n\n※行の先頭に「赤：」「青：」「黒：」を付けると色が変わります",
-                key=f"script_{st.session_state.selected_row_index}"
-            )
+            colored_html = colorize_script(new_text)
             
-            if new_text != current_text:
-                st.session_state.notebook_df.at[st.session_state.selected_row_index, "台本メモ"] = new_text
-                st.toast(f"No.{selected_row['No']} の台本を更新しました！", icon="💾")
-        
-        with tab2:
-            st.write(f"**【 No.{selected_row['No']} 】** の台本プレビュー")
-            script_html = format_script_with_colors(selected_row["台本メモ"])
-            st.markdown(f'<div class="script-preview">{script_html}</div>', unsafe_allow_html=True)
+            if colored_html:
+                st.markdown(colored_html, unsafe_allow_html=True)
+            else:
+                st.info("台本を入力してください")
+            
+            if st.button("✖ プレビューを閉じる"):
+                st.session_state.show_preview = False
+                st.rerun()
 
-    # --- 10. 保存ボタン ---
+    # --- 9. 保存ボタン ---
     st.divider()
     if st.button("💾 変更をスプレッドシートに保存する", type="primary", use_container_width=True):
         with st.spinner("保存中..."):
