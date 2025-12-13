@@ -1,6 +1,7 @@
 # ==============================================
 # 🔥 強制リロード設定（キャッシュ無効化）
-# Version: 3.0.0 - 2025-12-13 16:00 JST
+# Version: 4.0.0 - 2025-12-13 17:00 JST
+# ハイブリッドナビゲーション＋#100対応
 # ==============================================
 
 import streamlit as st
@@ -11,7 +12,6 @@ import json
 from datetime import datetime, timedelta
 import time
 import re
-import hashlib
 
 # キャッシュバスター（ページ読み込みごとに強制更新）
 CACHE_BUSTER = f"{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -116,6 +116,12 @@ st.markdown(f"""
         border-radius: 5px;
         font-size: 0.9em;
         font-weight: bold;
+    }}
+    
+    /* ナビゲーション区切り線 */
+    .nav-divider {{
+        border-top: 2px solid #A1887F;
+        margin: 20px 0;
     }}
     
     /* モバイル用スタイル */
@@ -259,7 +265,7 @@ def colorize_script(script_text):
 st.title("☕️ アニ無理 制作ノート")
 
 # バージョン表示（確認用）
-st.markdown('<span class="version-badge">🔄 Version 3.0.0 - Latest (キャッシュ無効化済)</span>', unsafe_allow_html=True)
+st.markdown('<span class="version-badge">🔄 Version 4.0.0 - ハイブリッドナビ＋#100対応</span>', unsafe_allow_html=True)
 
 # セッションステート初期化
 if 'selected_row_index' not in st.session_state:
@@ -325,6 +331,17 @@ with st.sidebar:
                     st.session_state.current_month += 1
                 st.session_state.selected_row_index = 0
                 st.rerun()
+        
+        st.divider()
+        
+        # エピソード番号の範囲表示
+        st.subheader("📊 エピソード番号")
+        st.markdown("""
+        - **12月**: #48〜#52（5本）
+        - **1月**: #53〜#73（21本）
+        - **2月**: #74〜#93（20本）
+        - **3月以降**: 自動で続く
+        """)
         
         st.divider()
         
@@ -575,17 +592,17 @@ if 'notebook_df' in st.session_state:
             with col2:
                 st.subheader("🎬 台本を見る・書く")
                 
-                # 前へ・次へボタン（完全動作版）
+                # ★★★ 上部ナビゲーション（既存） ★★★
                 nav_col1, nav_col2, nav_col3 = st.columns([1, 2, 1])
                 
                 with nav_col1:
                     # 前へボタン
                     if st.session_state.selected_row_index > 0:
-                        if st.button("⬅ 前へ", use_container_width=True, key="nav_prev_btn"):
+                        if st.button("⬅ 前へ", use_container_width=True, key="nav_prev_top"):
                             st.session_state.selected_row_index -= 1
                             st.rerun()
                     else:
-                        st.button("⬅ 前へ", use_container_width=True, key="nav_prev_disabled", disabled=True)
+                        st.button("⬅ 前へ", use_container_width=True, key="nav_prev_top_disabled", disabled=True)
                 
                 # 現在選択中の行情報を取得
                 actual_index = options[st.session_state.selected_row_index][1]
@@ -597,11 +614,11 @@ if 'notebook_df' in st.session_state:
                 with nav_col3:
                     # 次へボタン
                     if st.session_state.selected_row_index < len(options) - 1:
-                        if st.button("次へ ➡", use_container_width=True, key="nav_next_btn"):
+                        if st.button("次へ ➡", use_container_width=True, key="nav_next_top"):
                             st.session_state.selected_row_index += 1
                             st.rerun()
                     else:
-                        st.button("次へ ➡", use_container_width=True, key="nav_next_disabled", disabled=True)
+                        st.button("次へ ➡", use_container_width=True, key="nav_next_top_disabled", disabled=True)
                 
                 st.markdown("---")
                 
@@ -674,6 +691,32 @@ if 'notebook_df' in st.session_state:
                     colored_html = colorize_script(current_text)
                     
                     st.markdown('<div class="preview-box">' + colored_html + '</div>', unsafe_allow_html=True)
+                
+                # ★★★ 下部ナビゲーション（新規追加） ★★★
+                st.markdown('<div class="nav-divider"></div>', unsafe_allow_html=True)
+                
+                nav_bottom_col1, nav_bottom_col2, nav_bottom_col3 = st.columns([1, 2, 1])
+                
+                with nav_bottom_col1:
+                    # 前へボタン（下部）
+                    if st.session_state.selected_row_index > 0:
+                        if st.button("⬅ 前へ", use_container_width=True, key="nav_prev_bottom"):
+                            st.session_state.selected_row_index -= 1
+                            st.rerun()
+                    else:
+                        st.button("⬅ 前へ", use_container_width=True, key="nav_prev_bottom_disabled", disabled=True)
+                
+                with nav_bottom_col2:
+                    st.markdown(f"<center><strong>{selected_row['No']}</strong></center>", unsafe_allow_html=True)
+                
+                with nav_bottom_col3:
+                    # 次へボタン（下部）
+                    if st.session_state.selected_row_index < len(options) - 1:
+                        if st.button("次へ ➡", use_container_width=True, key="nav_next_bottom"):
+                            st.session_state.selected_row_index += 1
+                            st.rerun()
+                    else:
+                        st.button("次へ ➡", use_container_width=True, key="nav_next_bottom_disabled", disabled=True)
 
             # --- 9. 保存ボタン（PC版のみ） ---
             st.divider()
