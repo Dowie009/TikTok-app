@@ -242,6 +242,8 @@ if 'current_year' not in st.session_state:
     st.session_state.current_year = 2025
 if 'view_mode' not in st.session_state:
     st.session_state.view_mode = "preview"
+if 'nav_action' not in st.session_state:
+    st.session_state.nav_action = None
 
 # モバイルモード切り替え（デバッグ用）
 with st.sidebar:
@@ -553,16 +555,25 @@ if 'notebook_df' in st.session_state:
             with col2:
                 st.subheader("🎬 台本を見る・書く")
                 
-                # 前へ・次へボタン（完全修正版 - rerun前にインデックスを更新）
+                # ナビゲーションアクションの処理（ボタンより前に実行）
+                if st.session_state.nav_action == 'prev' and st.session_state.selected_row_index > 0:
+                    st.session_state.selected_row_index -= 1
+                    st.session_state.nav_action = None
+                    st.rerun()
+                elif st.session_state.nav_action == 'next' and st.session_state.selected_row_index < len(options) - 1:
+                    st.session_state.selected_row_index += 1
+                    st.session_state.nav_action = None
+                    st.rerun()
+                
+                # 前へ・次へボタン（最終修正版）
                 nav_col1, nav_col2, nav_col3 = st.columns([1, 2, 1])
                 
-                # ボタンが押される前にインデックスを確認
                 can_go_prev = st.session_state.selected_row_index > 0
                 can_go_next = st.session_state.selected_row_index < len(options) - 1
                 
                 with nav_col1:
                     if st.button("⬅ 前へ", use_container_width=True, key="prev_button_nav", disabled=not can_go_prev):
-                        st.session_state.selected_row_index = st.session_state.selected_row_index - 1
+                        st.session_state.nav_action = 'prev'
                         st.rerun()
                 
                 # 現在選択中の行情報を取得
@@ -574,7 +585,7 @@ if 'notebook_df' in st.session_state:
                 
                 with nav_col3:
                     if st.button("次へ ➡", use_container_width=True, key="next_button_nav", disabled=not can_go_next):
-                        st.session_state.selected_row_index = st.session_state.selected_row_index + 1
+                        st.session_state.nav_action = 'next'
                         st.rerun()
                 
                 st.markdown("---")
