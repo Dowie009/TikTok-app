@@ -1,3 +1,8 @@
+# ==============================================
+# 🔥 強制リロード設定（キャッシュ無効化）
+# Version: 3.0.0 - 2025-12-13 16:00 JST
+# ==============================================
+
 import streamlit as st
 import pandas as pd
 import gspread
@@ -6,120 +11,131 @@ import json
 from datetime import datetime, timedelta
 import time
 import re
+import hashlib
+
+# キャッシュバスター（ページ読み込みごとに強制更新）
+CACHE_BUSTER = f"{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
 # --- 1. アプリの設定 ---
-st.set_page_config(page_title="アニ無理 制作ノート", layout="wide", page_icon="☕")
+st.set_page_config(
+    page_title="アニ無理 制作ノート", 
+    layout="wide", 
+    page_icon="☕",
+    initial_sidebar_state="expanded"
+)
 
 # URLパラメータからモバイルモード判定
 query_params = st.query_params
 is_mobile_from_url = query_params.get("mobile", "false").lower() == "true"
 
 # --- 2. デザイン (ミルクティー・クラフト紙風 + 水色バー) ---
-st.markdown("""
+st.markdown(f"""
     <style>
+    /* キャッシュバスター: {CACHE_BUSTER} */
+    
     /* 全体の背景：濃いめの生成り */
-    .stApp {
+    .stApp {{
         background-color: #EFEBD6; 
         color: #4A3B2A;
-    }
+    }}
     
     /* 文字色統一：焦げ茶 */
-    h1, h2, h3, h4, h5, h6, p, label, span, div, li {
+    h1, h2, h3, h4, h5, h6, p, label, span, div, li {{
         color: #4A3B2A !important;
         font-family: "Hiragino Mincho ProN", "Yu Mincho", serif;
-    }
+    }}
 
     /* サイドバー：少し濃い茶色 */
-    [data-testid="stSidebar"] {
+    [data-testid="stSidebar"] {{
         background-color: #E6DCCF;
         border-right: 1px solid #C0B2A0;
-    }
+    }}
 
     /* 入力フォーム等の黒背景対策（念入りに） */
-    .stTextInput input, .stDateInput input, .stSelectbox div[data-baseweb="select"], .stTextArea textarea {
+    .stTextInput input, .stDateInput input, .stSelectbox div[data-baseweb="select"], .stTextArea textarea {{
         background-color: #FFFAF0 !important;
         color: #3E2723 !important;
         border: 1px solid #A1887F;
-    }
+    }}
     
     /* 表（データエディタ）の強制白背景化 */
-    [data-testid="stDataFrame"] {
+    [data-testid="stDataFrame"] {{
         background-color: #FFFAF0 !important;
         border: 1px solid #A1887F;
-    }
+    }}
     
     /* プログレスバー */
-    .stProgress > div > div > div {
+    .stProgress > div > div > div {{
         background-color: #FFFFFF !important;
-    }
-    .stProgress > div > div > div > div {
+    }}
+    .stProgress > div > div > div > div {{
         background-color: #81D4FA !important;
-    }
+    }}
 
     /* ボタンのデザイン */
-    .stButton>button {
+    .stButton>button {{
         background-color: #D7CCC8;
         color: #3E2723 !important;
         border: 1px solid #8D6E63;
         border-radius: 4px;
-    }
+    }}
     
     /* 色付きセリフのスタイル */
-    .red-text {
+    .red-text {{
         color: #E53935 !important;
         font-weight: bold;
         font-size: 1.1em;
         line-height: 1.8;
-    }
-    .blue-text {
+    }}
+    .blue-text {{
         color: #1E88E5 !important;
         font-weight: bold;
         font-size: 1.1em;
         line-height: 1.8;
-    }
-    .black-text {
+    }}
+    .black-text {{
         color: #212121 !important;
         font-size: 1.0em;
         line-height: 1.8;
-    }
+    }}
     
     /* プレビューエリアの背景 */
-    .preview-box {
+    .preview-box {{
         background-color: #FFFAF0;
         padding: 20px;
         border-radius: 8px;
         border: 2px solid #A1887F;
         min-height: 300px;
-    }
+    }}
+    
+    /* バージョン表示 */
+    .version-badge {{
+        background-color: #4CAF50;
+        color: white;
+        padding: 5px 10px;
+        border-radius: 5px;
+        font-size: 0.9em;
+        font-weight: bold;
+    }}
     
     /* モバイル用スタイル */
-    @media (max-width: 768px) {
-        .stApp {
+    @media (max-width: 768px) {{
+        .stApp {{
             padding: 10px;
-        }
-        h1 {
+        }}
+        h1 {{
             font-size: 1.5em !important;
-        }
-        h2 {
+        }}
+        h2 {{
             font-size: 1.2em !important;
-        }
-    }
-    
-    /* デバッグ用スタイル */
-    .debug-box {
-        background-color: #FFF3E0;
-        border: 2px solid #FF9800;
-        padding: 10px;
-        border-radius: 5px;
-        margin: 10px 0;
-    }
+        }}
+    }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. スプレッドシート接続機能（キャッシュ付き） ---
-@st.cache_resource
+# --- 3. スプレッドシート接続機能（キャッシュなし・強制再取得） ---
 def connect_to_gsheets():
-    """Google Sheetsに接続（キャッシュで再利用）"""
+    """Google Sheetsに接続（キャッシュなし）"""
     try:
         # Secretsから直接辞書型で取得（文字列の場合のみjson.loads）
         json_key_data = st.secrets["gcp"]["json_key"]
@@ -143,11 +159,11 @@ def connect_to_gsheets():
         return None
 
 def load_data_from_sheet(sheet):
-    """シートからデータを読み込み"""
+    """シートからデータを読み込み（強制再取得）"""
     if sheet is None:
         return None
     try:
-        time.sleep(0.5)
+        time.sleep(0.3)
         data = sheet.get_all_records()
         if not data:
             return None
@@ -167,7 +183,7 @@ def save_data_to_sheet(sheet, df):
         st.error("シート接続がありません")
         return False
     try:
-        time.sleep(0.5)
+        time.sleep(0.3)
         sheet.clear()
         save_df = df.copy()
         if "台本メモ" in save_df.columns:
@@ -242,6 +258,9 @@ def colorize_script(script_text):
 # --- 5. メイン処理 ---
 st.title("☕️ アニ無理 制作ノート")
 
+# バージョン表示（確認用）
+st.markdown('<span class="version-badge">🔄 Version 3.0.0 - Latest (キャッシュ無効化済)</span>', unsafe_allow_html=True)
+
 # セッションステート初期化
 if 'selected_row_index' not in st.session_state:
     st.session_state.selected_row_index = 0
@@ -251,15 +270,10 @@ if 'current_year' not in st.session_state:
     st.session_state.current_year = 2025
 if 'view_mode' not in st.session_state:
     st.session_state.view_mode = "preview"
-if 'debug_mode' not in st.session_state:
-    st.session_state.debug_mode = False
 
-# モバイルモード切り替え（デバッグ用）
+# モバイルモード切り替え
 with st.sidebar:
     st.header("⚙️ 設定")
-    
-    # デバッグモードトグル
-    st.session_state.debug_mode = st.checkbox("🐛 デバッグモード", value=st.session_state.debug_mode)
     
     # URLパラメータでモバイルモードが指定されている場合は固定
     if is_mobile_from_url:
@@ -290,7 +304,7 @@ with st.sidebar:
         col_prev, col_current, col_next = st.columns([1, 2, 1])
         
         with col_prev:
-            if st.button("◀ 前月"):
+            if st.button("◀ 前月", key="month_prev"):
                 if st.session_state.current_month == 1:
                     st.session_state.current_month = 12
                     st.session_state.current_year -= 1
@@ -303,7 +317,7 @@ with st.sidebar:
             st.markdown(f"### {st.session_state.current_year}年 {st.session_state.current_month}月")
         
         with col_next:
-            if st.button("次月 ▶"):
+            if st.button("次月 ▶", key="month_next"):
                 if st.session_state.current_month == 12:
                     st.session_state.current_month = 1
                     st.session_state.current_year += 1
@@ -328,25 +342,18 @@ with st.sidebar:
         - 黒 → そのまま（黒色）
         """)
 
-# --- 6. データ初期化・読み込み ---
+# --- 6. データ初期化・読み込み（強制再取得） ---
+# キャッシュを使わず毎回読み込む
 sheet = connect_to_gsheets()
+sheet_df = load_data_from_sheet(sheet)
 
-if 'data_loaded' not in st.session_state:
-    st.session_state.data_loaded = False
-
-if sheet is not None and not st.session_state.data_loaded:
-    sheet_df = load_data_from_sheet(sheet)
-    
-    if sheet_df is not None and not sheet_df.empty:
-        sheet_df = update_episode_numbers(sheet_df, start_episode=48)
-        st.session_state.notebook_df = sheet_df
-        st.session_state.data_loaded = True
-        
-        if not is_mobile:
-            save_data_to_sheet(sheet, st.session_state.notebook_df)
-    else:
-        st.error("⚠️ Google Sheetsにデータがありません")
-        st.info("先にGoogle Sheetsにデータを入力してください")
+if sheet_df is not None and not sheet_df.empty:
+    sheet_df = update_episode_numbers(sheet_df, start_episode=48)
+    st.session_state.notebook_df = sheet_df
+else:
+    st.error("⚠️ Google Sheetsにデータがありません")
+    st.info("先にGoogle Sheetsにデータを入力してください")
+    st.stop()
 
 if 'notebook_df' in st.session_state:
     df = st.session_state.notebook_df
@@ -357,6 +364,7 @@ if 'notebook_df' in st.session_state:
     
     if current_month_df.empty:
         st.warning(f"{st.session_state.current_year}年{st.session_state.current_month}月のデータがありません")
+        st.info("💡 左サイドバーの「月の切り替え」で他の月を確認してください")
     else:
         # --- 7. 管理指標ダッシュボード ---
         finished_count, deadline_text, sub_text = calculate_stock_deadline(current_month_df)
@@ -567,29 +575,17 @@ if 'notebook_df' in st.session_state:
             with col2:
                 st.subheader("🎬 台本を見る・書く")
                 
-                # デバッグ情報表示
-                if st.session_state.debug_mode:
-                    st.markdown('<div class="debug-box">', unsafe_allow_html=True)
-                    st.write(f"**🐛 デバッグ情報**")
-                    st.write(f"- 現在のインデックス: `{st.session_state.selected_row_index}`")
-                    st.write(f"- 全エピソード数: `{len(options)}`")
-                    st.write(f"- 前へ可能: `{st.session_state.selected_row_index > 0}`")
-                    st.write(f"- 次へ可能: `{st.session_state.selected_row_index < len(options) - 1}`")
-                    st.markdown('</div>', unsafe_allow_html=True)
-                
-                # 前へ・次へボタン（シンプル版 - 直接操作）
+                # 前へ・次へボタン（完全動作版）
                 nav_col1, nav_col2, nav_col3 = st.columns([1, 2, 1])
                 
                 with nav_col1:
                     # 前へボタン
                     if st.session_state.selected_row_index > 0:
-                        if st.button("⬅ 前へ", use_container_width=True, key="btn_prev"):
+                        if st.button("⬅ 前へ", use_container_width=True, key="nav_prev_btn"):
                             st.session_state.selected_row_index -= 1
-                            if st.session_state.debug_mode:
-                                st.success(f"前へボタンが押されました！新しいインデックス: {st.session_state.selected_row_index}")
                             st.rerun()
                     else:
-                        st.button("⬅ 前へ", use_container_width=True, key="btn_prev_disabled", disabled=True)
+                        st.button("⬅ 前へ", use_container_width=True, key="nav_prev_disabled", disabled=True)
                 
                 # 現在選択中の行情報を取得
                 actual_index = options[st.session_state.selected_row_index][1]
@@ -601,13 +597,11 @@ if 'notebook_df' in st.session_state:
                 with nav_col3:
                     # 次へボタン
                     if st.session_state.selected_row_index < len(options) - 1:
-                        if st.button("次へ ➡", use_container_width=True, key="btn_next"):
+                        if st.button("次へ ➡", use_container_width=True, key="nav_next_btn"):
                             st.session_state.selected_row_index += 1
-                            if st.session_state.debug_mode:
-                                st.success(f"次へボタンが押されました！新しいインデックス: {st.session_state.selected_row_index}")
                             st.rerun()
                     else:
-                        st.button("次へ ➡", use_container_width=True, key="btn_next_disabled", disabled=True)
+                        st.button("次へ ➡", use_container_width=True, key="nav_next_disabled", disabled=True)
                 
                 st.markdown("---")
                 
