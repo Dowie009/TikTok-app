@@ -122,7 +122,6 @@ def load_data_from_sheet(sheet):
             df = df.rename(columns={"台本": "台本メモ"})
         
         df = df[~df["曜日"].isin(["(土)", "(日)"])].reset_index(drop=True)
-        df["No"] = range(1, len(df) + 1)
         
         return df
     except Exception as e:
@@ -160,6 +159,22 @@ def get_weekdays(start_date, end_date):
             })
         current += timedelta(days=1)
     return weekdays
+
+def calculate_episode_number(year, month):
+    """年月から開始エピソード番号を計算（2025年12月 = #48スタート）"""
+    # 2025年12月を基準（#48）
+    base_year = 2025
+    base_month = 12
+    base_episode = 48
+    
+    # 月数の差を計算
+    months_diff = (year - base_year) * 12 + (month - base_month)
+    
+    # 各月の平日数を概算（約22日）で計算
+    # より正確には、実際の平日数を累積すべきだが、簡易版として22日/月を使用
+    episode_offset = months_diff * 22
+    
+    return base_episode + episode_offset
 
 def calculate_stock_deadline(df):
     """在庫状況から投稿可能日を計算"""
@@ -211,6 +226,34 @@ def colorize_script(script_text):
     
     return ''.join(html_lines)
 
+def generate_month_schedule(year, month, start_episode):
+    """指定された年月のスケジュールを生成"""
+    # 月の最初と最後の日を取得
+    start_date = datetime(year, month, 1)
+    if month == 12:
+        end_date = datetime(year + 1, 1, 1) - timedelta(days=1)
+    else:
+        end_date = datetime(year, month + 1, 1) - timedelta(days=1)
+    
+    days_data = get_weekdays(start_date, end_date)
+    data = []
+    
+    for i, d in enumerate(days_data):
+        episode_num = start_episode + i
+        if episode_num > 100:  # #100まで
+            break
+            
+        data.append({
+            "No": f"#{episode_num}",
+            "公開予定日": d['date'].strftime("%m/%d"),
+            "曜日": d['wday_str'],
+            "タイトル": "",
+            "ステータス": "未",
+            "台本メモ": ""
+        })
+    
+    return pd.DataFrame(data)
+
 # --- 5. メイン処理 ---
 st.title("☕️ アニ無理 制作ノート")
 
@@ -223,6 +266,8 @@ if 'current_year' not in st.session_state:
     st.session_state.current_year = 2025
 if 'view_mode' not in st.session_state:
     st.session_state.view_mode = "edit"  # "edit" or "preview"
+if 'month_changed' not in st.session_state:
+    st.session_state.month_changed = False
 
 with st.sidebar:
     st.header("⚙️ 設定")
@@ -238,6 +283,8 @@ with st.sidebar:
                 st.session_state.current_year -= 1
             else:
                 st.session_state.current_month -= 1
+            st.session_state.month_changed = True
+            st.session_state.selected_row_index = 0
             st.rerun()
     
     with col_current:
@@ -250,6 +297,8 @@ with st.sidebar:
                 st.session_state.current_year += 1
             else:
                 st.session_state.current_month += 1
+            st.session_state.month_changed = True
+            st.session_state.selected_row_index = 0
             st.rerun()
     
     st.divider()
@@ -271,37 +320,46 @@ with st.sidebar:
 # --- 6. データ初期化・読み込み ---
 sheet = connect_to_gsheets()
 
+# 月が変更された場合、または初回読み込み時
 if 'data_loaded' not in st.session_state:
     st.session_state.data_loaded = False
 
-if sheet is not None and not st.session_state.data_loaded:
-    sheet_df = load_data_from_sheet(sheet)
+# 月変更時または初回時にスケジュールを再生成
+if st.session_state.month_changed or not st.session_state.data_loaded:
+    # 開始エピソード番号を計算
+    start_episode = calculate_episode_number(st.session_state.current_year, st.session_state.current_month)
     
-    if sheet_df is not None and not sheet_df.empty:
-        st.session_state.notebook_df = sheet_df
-        st.session_state.data_loaded = True
-    elif 'notebook_df' not in st.session_state:
-        # 選択された月の平日データを生成
-        start_date = datetime(st.session_state.current_year, st.session_state.current_month, 1)
-        if st.session_state.current_month == 12:
-            end_date = datetime(st.session_state.current_year + 1, 1, 1) - timedelta(days=1)
-        else:
-            end_date = datetime(st.session_state.current_year, st.session_state.current_month + 1, 1) - timedelta(days=1)
+    # 新しい月のスケジュールを生成
+    new_schedule = generate_month_schedule(
+        st.session_state.current_year, 
+        st.session_state.current_month,
+        start_episode
+    )
+    
+    if sheet is not None:
+        # シートから既存データを読み込み
+        sheet_df = load_data_from_sheet(sheet)
         
-        days_data = get_weekdays(start_date, end_date)
-        data = []
-        for i, d in enumerate(days_data):
-            data.append({
-                "No": i + 1,
-                "公開予定日": d['date'].strftime("%m/%d"),
-                "曜日": d['wday_str'],
-                "タイトル": "",
-                "ステータス": "未",
-                "台本メモ": ""
-            })
-        st.session_state.notebook_df = pd.DataFrame(data)
-        st.session_state.data_loaded = True
-        save_data_to_sheet(sheet, st.session_state.notebook_df)
+        if sheet_df is not None and not sheet_df.empty:
+            # 既存データと新規スケジュールをマージ（Noをキーに）
+            merged_df = new_schedule.copy()
+            for idx, row in merged_df.iterrows():
+                existing_row = sheet_df[sheet_df['No'] == row['No']]
+                if not existing_row.empty:
+                    # 既存データがあれば上書き
+                    merged_df.loc[idx, 'タイトル'] = existing_row.iloc[0]['タイトル']
+                    merged_df.loc[idx, 'ステータス'] = existing_row.iloc[0]['ステータス']
+                    merged_df.loc[idx, '台本メモ'] = existing_row.iloc[0]['台本メモ']
+            
+            st.session_state.notebook_df = merged_df
+        else:
+            # 既存データがなければ新規スケジュールをそのまま使用
+            st.session_state.notebook_df = new_schedule
+    else:
+        st.session_state.notebook_df = new_schedule
+    
+    st.session_state.data_loaded = True
+    st.session_state.month_changed = False
 
 if 'notebook_df' in st.session_state:
     df = st.session_state.notebook_df
@@ -340,8 +398,12 @@ if 'notebook_df' in st.session_state:
         for idx, row in st.session_state.notebook_df.iterrows():
             display_title = row['タイトル'] if row['タイトル'] else "（タイトル未定）"
             status_mark = "✅" if row['ステータス'] in ["撮影済", "UP済"] else "📝"
-            label = f"No.{row['No']} | {row['公開予定日']} {row['曜日']} | {display_title}"
+            label = f"{row['No']} | {row['公開予定日']} {row['曜日']} | {display_title}"
             options.append(label)
+        
+        # 選択インデックスが範囲外の場合は0にリセット
+        if st.session_state.selected_row_index >= len(options):
+            st.session_state.selected_row_index = 0
         
         selected_label = st.radio(
             "台本を選択",
@@ -394,7 +456,7 @@ if 'notebook_df' in st.session_state:
                 st.session_state.view_mode = "preview"
                 st.rerun()
         
-        st.write(f"**【 No.{selected_row['No']} 】** の台本")
+        st.write(f"**【 {selected_row['No']} 】** の台本")
         
         current_text = selected_row["台本メモ"]
         
@@ -411,7 +473,7 @@ if 'notebook_df' in st.session_state:
             
             if new_text != current_text:
                 st.session_state.notebook_df.at[st.session_state.selected_row_index, "台本メモ"] = new_text
-                st.toast(f"No.{selected_row['No']} の台本を更新しました！", icon="💾")
+                st.toast(f"{selected_row['No']} の台本を更新しました！", icon="💾")
         
         else:
             # プレビューモード
