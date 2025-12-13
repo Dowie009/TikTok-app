@@ -329,12 +329,30 @@ if 'notebook_df' in st.session_state:
             st.subheader("🗓 スケジュール帳")
             st.caption("👇 ラジオボタンで行を選択すると、右側の台本が切り替わります")
             
-            # ラジオボタンによる行選択
+            # ステータス凡例を表示
+            st.markdown("""
+            **ステータス表示：**
+            - ✅ 撮影済・UP済
+            - 📝 台本完
+            - ⏳ 未
+            """)
+            
+            st.divider()
+            
+            # ラジオボタンによる行選択（ステータスマーク付き）
             options = []
             for idx, row in current_month_df.iterrows():
                 display_title = row['タイトル'] if row['タイトル'] else "（タイトル未定）"
-                status_mark = "✅" if row['ステータス'] in ["撮影済", "UP済"] else "📝"
-                label = f"{row['No']} | {row['公開予定日']} {row['曜日']} | {display_title}"
+                
+                # ステータスに応じたマーク
+                if row['ステータス'] in ["撮影済", "UP済"]:
+                    status_mark = "✅"
+                elif row['ステータス'] == "台本完":
+                    status_mark = "📝"
+                else:
+                    status_mark = "⏳"
+                
+                label = f"{status_mark} {row['No']} | {row['公開予定日']} {row['曜日']} | {display_title}"
                 options.append((label, idx))
             
             # 選択インデックスが範囲外の場合は0にリセット
