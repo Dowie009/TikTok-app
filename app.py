@@ -58,15 +58,6 @@ st.markdown("""
         border: 1px solid #8D6E63;
         border-radius: 4px;
     }
-    
-    /* クリック可能な行のスタイル */
-    .clickable-row {
-        cursor: pointer;
-        transition: background-color 0.2s;
-    }
-    .clickable-row:hover {
-        background-color: #E6DCCF !important;
-    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -178,24 +169,26 @@ with st.sidebar:
     col_prev, col_current, col_next = st.columns([1, 2, 1])
     
     with col_prev:
-        if st.button("◀ 前月"):
+        if st.button("◀ 前月", key="prev_month"):
             if st.session_state.current_month == 1:
                 st.session_state.current_month = 12
                 st.session_state.current_year -= 1
             else:
                 st.session_state.current_month -= 1
+            st.session_state.data_loaded = False  # データ再読み込み
             st.rerun()
     
     with col_current:
         st.markdown(f"### {st.session_state.current_year}年 {st.session_state.current_month}月")
     
     with col_next:
-        if st.button("次月 ▶"):
+        if st.button("次月 ▶", key="next_month"):
             if st.session_state.current_month == 12:
                 st.session_state.current_month = 1
                 st.session_state.current_year += 1
             else:
                 st.session_state.current_month += 1
+            st.session_state.data_loaded = False  # データ再読み込み
             st.rerun()
 
 # --- 6. データ初期化・読み込み ---
@@ -263,9 +256,9 @@ if 'notebook_df' in st.session_state:
 
     with col1:
         st.subheader("🗓 スケジュール帳")
-        st.caption("👇 行をクリックすると右側の台本が切り替わります")
+        st.caption("👇 台本メモをクリックすると右側の台本エディタに移動します")
         
-        # データエディタ（クリック検出用）
+        # データエディタ
         edited_df = st.data_editor(
             st.session_state.notebook_df,
             column_config={
@@ -283,9 +276,7 @@ if 'notebook_df' in st.session_state:
             use_container_width=True,
             height=600,
             hide_index=True,
-            key="data_editor",
-            on_select="rerun",
-            selection_mode="single-row"
+            key="data_editor"
         )
         
         if not edited_df.equals(st.session_state.notebook_df):
@@ -298,7 +289,7 @@ if 'notebook_df' in st.session_state:
         nav_col1, nav_col2, nav_col3 = st.columns([1, 2, 1])
         
         with nav_col1:
-            if st.button("⬅ 前へ", use_container_width=True):
+            if st.button("⬅ 前へ", use_container_width=True, key="prev_script"):
                 if st.session_state.selected_row_index > 0:
                     st.session_state.selected_row_index -= 1
                     st.rerun()
@@ -308,15 +299,30 @@ if 'notebook_df' in st.session_state:
             st.info(f"📅 {selected_row['公開予定日']} {selected_row['曜日']}")
         
         with nav_col3:
-            if st.button("次へ ➡", use_container_width=True):
+            if st.button("次へ ➡", use_container_width=True, key="next_script"):
                 if st.session_state.selected_row_index < len(st.session_state.notebook_df) - 1:
                     st.session_state.selected_row_index += 1
                     st.rerun()
         
+        # 日付選択（クリック連動の代替）
+        st.caption("👇 日付を選んで台本を切り替え")
+        options = []
+        for idx, row in st.session_state.notebook_df.iterrows():
+            display_title = row['タイトル'] if row['タイトル'] else "（タイトル未定）"
+            status_mark = "✅" if row['ステータス'] in ["撮影済", "UP済"] else "📝"
+            label = f"{status_mark} {row['公開予定日']} {row['曜日']} : {display_title}"
+            options.append(label)
+        
+        selected_label = st.selectbox("動画を選択", options, index=st.session_state.selected_row_index, key="script_selector")
+        new_index = options.index(selected_label)
+        if new_index != st.session_state.selected_row_index:
+            st.session_state.selected_row_index = new_index
+            st.rerun()
+        
         st.markdown("---")
         st.write(f"**【 No.{selected_row['No']} 】** の台本")
         
-        # リッチテキストエディタ（HTML対応）
+        # テキストエディタ
         current_text = selected_row["台本メモ"]
         
         st.markdown("💡 **使い方**: Notion等からコピーした文字色付きテキストをそのまま貼り付けてください")
@@ -324,7 +330,7 @@ if 'notebook_df' in st.session_state:
         new_text = st.text_area(
             "台本エディタ",
             value=current_text,
-            height=450,
+            height=400,
             placeholder="ここに台詞や構成を記入...\n\n※文字色付きテキストもそのまま貼り付けOK！",
             key=f"script_{st.session_state.selected_row_index}"
         )
