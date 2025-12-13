@@ -1,7 +1,7 @@
 # ==============================================
 # 🔥 強制リロード設定（キャッシュ無効化）
-# Version: 5.0.0 - 2025-12-13 18:00 JST
-# セレクトボックスナビ＋1月2月自動生成
+# Version: 5.1.0 - 2025-12-13 19:00 JST
+# API制限エラー対策（キャッシュ復活）
 # ==============================================
 
 import streamlit as st
@@ -139,9 +139,10 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. スプレッドシート接続機能（キャッシュなし・強制再取得） ---
+# --- 3. スプレッドシート接続機能（キャッシュあり・API制限対策） ---
+@st.cache_resource(ttl=3600)  # 1時間キャッシュ
 def connect_to_gsheets():
-    """Google Sheetsに接続（キャッシュなし）"""
+    """Google Sheetsに接続（1時間キャッシュ）"""
     try:
         json_key_data = st.secrets["gcp"]["json_key"]
         
@@ -161,13 +162,14 @@ def connect_to_gsheets():
         st.error(f"Google Sheets接続エラー: {e}")
         return None
 
-def load_data_from_sheet(sheet):
-    """シートからデータを読み込み（強制再取得）"""
-    if sheet is None:
+@st.cache_data(ttl=600)  # 10分キャッシュ
+def load_data_from_sheet(_sheet):
+    """シートからデータを読み込み（10分キャッシュ）"""
+    if _sheet is None:
         return None
     try:
         time.sleep(0.3)
-        data = sheet.get_all_records()
+        data = _sheet.get_all_records()
         if not data:
             return None
         df = pd.DataFrame(data)
@@ -192,6 +194,10 @@ def save_data_to_sheet(sheet, df):
         if "台本メモ" in save_df.columns:
             save_df = save_df.rename(columns={"台本メモ": "台本"})
         sheet.update([save_df.columns.values.tolist()] + save_df.values.tolist())
+        
+        # 保存後にキャッシュをクリア
+        load_data_from_sheet.clear()
+        
         return True
     except Exception as e:
         st.error(f"保存エラー: {e}")
@@ -324,7 +330,7 @@ def colorize_script(script_text):
 st.title("☕️ アニ無理 制作ノート")
 
 # バージョン表示（確認用）
-st.markdown('<span class="version-badge">🔄 Version 5.0.0 - セレクトボックスナビ＋1月2月自動生成</span>', unsafe_allow_html=True)
+st.markdown('<span class="version-badge">🔄 Version 5.1.0 - API制限エラー対策</span>', unsafe_allow_html=True)
 
 # セッションステート初期化
 if 'selected_row_index' not in st.session_state:
@@ -411,8 +417,16 @@ with st.sidebar:
         - 青 → **道ゐ：** （青色）
         - 黒 → そのまま（黒色）
         """)
+        
+        st.divider()
+        
+        # キャッシュクリアボタン
+        if st.button("🔄 最新データを取得", type="secondary", use_container_width=True):
+            load_data_from_sheet.clear()
+            st.success("✅ キャッシュをクリアしました！")
+            st.rerun()
 
-# --- 6. データ初期化・読み込み（強制再取得） ---
+# --- 6. データ初期化・読み込み（キャッシュあり） ---
 sheet = connect_to_gsheets()
 sheet_df = load_data_from_sheet(sheet)
 
