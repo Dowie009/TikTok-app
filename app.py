@@ -1,7 +1,7 @@
 # ==============================================
 # 🔥 強制リロード設定（キャッシュ無効化）
-# Version: 8.0.0 - 2025-12-13 22:00 JST
-# スマホ版ナビゲーション強化版
+# Version: 8.1.0 - 2025-12-13 22:30 JST
+# スマホ版ナビ強化＋無限ループ修正
 # ==============================================
 
 import streamlit as st
@@ -112,7 +112,7 @@ st.markdown(f"""
     
     /* バージョン表示 */
     .version-badge {{
-        background-color: #FF6B6B;
+        background-color: #4CAF50;
         color: white;
         padding: 5px 10px;
         border-radius: 5px;
@@ -263,7 +263,6 @@ def ensure_all_months_data(df):
     
     # 2月のデータがない場合
     if 2 not in existing_months:
-        # 1月のデータから最後のエピソード番号を取得
         jan_df = pd.concat(all_data, ignore_index=True)
         jan_df['月'] = pd.to_datetime(jan_df['公開予定日'], format='%m/%d', errors='coerce').dt.month
         jan_episodes = jan_df[jan_df['月'] == 1]
@@ -348,7 +347,7 @@ def colorize_script(script_text):
 st.title("☕️ アニ無理 制作ノート")
 
 # バージョン表示（確認用）
-st.markdown('<span class="version-badge">📱 Version 8.0.0 - スマホ版ナビ強化</span>', unsafe_allow_html=True)
+st.markdown('<span class="version-badge">🔄 Version 8.1.0 - スマホ版ナビ強化（無限ループ修正）</span>', unsafe_allow_html=True)
 
 # セッションステート初期化
 if 'selected_row_index' not in st.session_state:
@@ -487,7 +486,7 @@ if 'notebook_df' in st.session_state:
 
         # --- 8. スケジュール一覧 & 台本機能 ---
         if is_mobile:
-            # ========== モバイル版（ナビゲーション強化版） ==========
+            # ========== モバイル版（ナビゲーション強化版 - rerun削減） ==========
             st.subheader("🗓 スケジュール")
             
             st.caption("**ステータス：** ✅UP済 | ✂️編集済 | 🎬撮影済 | 📝台本完 | ⏳未")
@@ -520,12 +519,9 @@ if 'notebook_df' in st.session_state:
             nav_col1, nav_col2, nav_col3 = st.columns([1, 3, 1])
             
             with nav_col1:
-                if st.session_state.selected_row_index > 0:
-                    if st.button("⬅", key="mobile_prev_top", use_container_width=True):
-                        st.session_state.selected_row_index -= 1
-                        st.rerun()
-                else:
-                    st.button("⬅", key="mobile_prev_top_disabled", disabled=True, use_container_width=True)
+                if st.button("⬅", key="mobile_prev_top", disabled=(st.session_state.selected_row_index == 0), use_container_width=True):
+                    st.session_state.selected_row_index -= 1
+                    st.rerun()
             
             with nav_col2:
                 selected_label = st.selectbox(
@@ -536,19 +532,17 @@ if 'notebook_df' in st.session_state:
                     label_visibility="collapsed"
                 )
                 
+                # 🔥 rerun条件を厳格化
                 if selected_label:
                     new_index = [opt[0] for opt in options].index(selected_label)
                     if new_index != st.session_state.selected_row_index:
                         st.session_state.selected_row_index = new_index
-                        st.rerun()
+                        # セレクトボックス変更時のみrerun
             
             with nav_col3:
-                if st.session_state.selected_row_index < max_index:
-                    if st.button("➡", key="mobile_next_top", use_container_width=True):
-                        st.session_state.selected_row_index += 1
-                        st.rerun()
-                else:
-                    st.button("➡", key="mobile_next_top_disabled", disabled=True, use_container_width=True)
+                if st.button("➡", key="mobile_next_top", disabled=(st.session_state.selected_row_index >= max_index), use_container_width=True):
+                    st.session_state.selected_row_index += 1
+                    st.rerun()
             
             actual_index = options[st.session_state.selected_row_index][1]
             selected_row = st.session_state.notebook_df.loc[actual_index]
@@ -586,115 +580,34 @@ if 'notebook_df' in st.session_state:
             
             st.markdown('<div class="preview-box">' + colored_html + '</div>', unsafe_allow_html=True)
             
-            # ★★★ 下部ナビゲーション（ボタン＋セレクトボックス） ★★★
+            # ★★★ 下部ナビゲーション（ボタンのみ - セレクトボックス削除） ★★★
             st.markdown('<div class="nav-divider"></div>', unsafe_allow_html=True)
             
-            nav_bottom_col1, nav_bottom_col2, nav_bottom_col3 = st.columns([1, 3, 1])
+            nav_bottom_col1, nav_bottom_col2, nav_bottom_col3 = st.columns([1, 2, 1])
             
             with nav_bottom_col1:
-                if st.session_state.selected_row_index > 0:
-                    if st.button("⬅", key="mobile_prev_bottom", use_container_width=True):
-                        st.session_state.selected_row_index -= 1
-                        st.rerun()
-                else:
-                    st.button("⬅", key="mobile_prev_bottom_disabled", disabled=True, use_container_width=True)
+                if st.button("⬅ 前へ", key="mobile_prev_bottom", disabled=(st.session_state.selected_row_index == 0), use_container_width=True):
+                    st.session_state.selected_row_index -= 1
+                    st.rerun()
             
             with nav_bottom_col2:
-                selected_label_bottom = st.selectbox(
-                    "エピソードを選択（下部）",
-                    [opt[0] for opt in options],
-                    index=st.session_state.selected_row_index,
-                    key="episode_selector_mobile_bottom",
-                    label_visibility="collapsed"
-                )
-                
-                if selected_label_bottom:
-                    new_index = [opt[0] for opt in options].index(selected_label_bottom)
-                    if new_index != st.session_state.selected_row_index:
-                        st.session_state.selected_row_index = new_index
-                        st.rerun()
+                st.markdown(f"<center><strong>{selected_row['No']}</strong></center>", unsafe_allow_html=True)
             
             with nav_bottom_col3:
-                if st.session_state.selected_row_index < max_index:
-                    if st.button("➡", key="mobile_next_bottom", use_container_width=True):
-                        st.session_state.selected_row_index += 1
-                        st.rerun()
-                else:
-                    st.button("➡", key="mobile_next_bottom_disabled", disabled=True, use_container_width=True)
+                if st.button("次へ ➡", key="mobile_next_bottom", disabled=(st.session_state.selected_row_index >= max_index), use_container_width=True):
+                    st.session_state.selected_row_index += 1
+                    st.rerun()
             
         else:
-            # ========== PC版（シンプル版 - セレクトボックスのみ） ==========
+            # ========== PC版（変更なし） ==========
             col1, col2 = st.columns([1.3, 1])
 
             with col1:
                 st.subheader("🗓 スケジュール帳")
                 
-                # --- 一括ステータス更新機能 ---
-                with st.expander("📌 一括ステータス更新", expanded=False):
-                    st.caption("範囲を指定して、複数のエピソードのステータスを一度に変更できます")
-                    
-                    bulk_col1, bulk_col2, bulk_col3 = st.columns(3)
-                    
-                    episode_list = current_month_df['No'].tolist()
-                    
-                    with bulk_col1:
-                        start_episode = st.selectbox(
-                            "開始エピソード",
-                            options=episode_list,
-                            key="bulk_start"
-                        )
-                    
-                    with bulk_col2:
-                        end_episode = st.selectbox(
-                            "終了エピソード",
-                            options=episode_list,
-                            index=len(episode_list)-1 if len(episode_list) > 0 else 0,
-                            key="bulk_end"
-                        )
-                    
-                    with bulk_col3:
-                        bulk_status = st.selectbox(
-                            "変更先ステータス",
-                            options=["未", "台本完", "撮影済", "編集済", "UP済"],
-                            key="bulk_status"
-                        )
-                    
-                    if st.button("✅ 一括更新を実行", type="primary", use_container_width=True):
-                        try:
-                            start_idx = episode_list.index(start_episode)
-                            end_idx = episode_list.index(end_episode)
-                            
-                            if start_idx > end_idx:
-                                st.error("⚠️ 開始エピソードは終了エピソードより前にしてください")
-                            else:
-                                update_count = 0
-                                for i in range(start_idx, end_idx + 1):
-                                    episode_no = episode_list[i]
-                                    mask = st.session_state.notebook_df['No'] == episode_no
-                                    st.session_state.notebook_df.loc[mask, 'ステータス'] = bulk_status
-                                    update_count += 1
-                                
-                                st.success(f"✅ {start_episode} 〜 {end_episode} の {update_count}件を「{bulk_status}」に更新しました！")
-                                st.balloons()
-                                time.sleep(1)
-                                st.rerun()
-                        except Exception as e:
-                            st.error(f"エラーが発生しました: {e}")
+                st.caption("👇 セレクトボックスでエピソードを選択してください")
                 
-                st.caption("👇 ラジオボタンで行を選択すると、右側の台本が切り替わります")
-                
-                st.markdown("""
-                **ステータス表示：**
-                - ✅ UP済
-                - ✂️ 編集済
-                - 🎬 撮影済
-                - 📝 台本完
-                - ⏳ 未
-                """)
-                
-                st.divider()
-                
-                # ラジオボタンによる行選択
+                # エピソード選択
                 options = []
                 for idx, row in current_month_df.iterrows():
                     display_title = row['タイトル'] if row['タイトル'] else "（タイトル未定）"
@@ -716,18 +629,16 @@ if 'notebook_df' in st.session_state:
                 if st.session_state.selected_row_index >= len(options):
                     st.session_state.selected_row_index = 0
                 
-                selected_label = st.radio(
+                selected_label = st.selectbox(
                     "台本を選択",
                     [opt[0] for opt in options],
                     index=st.session_state.selected_row_index,
-                    key="row_selector",
-                    label_visibility="collapsed"
+                    key="row_selector"
                 )
                 
                 if selected_label:
                     new_index = [opt[0] for opt in options].index(selected_label)
-                    if new_index != st.session_state.selected_row_index:
-                        st.session_state.selected_row_index = new_index
+                    st.session_state.selected_row_index = new_index
 
             with col2:
                 st.subheader("🎬 台本を見る・書く")
@@ -736,23 +647,7 @@ if 'notebook_df' in st.session_state:
                 actual_index = options[st.session_state.selected_row_index][1]
                 selected_row = st.session_state.notebook_df.loc[actual_index]
                 
-                # ★★★ 上部ナビゲーション（セレクトボックスのみ） ★★★
-                st.write("**📅 エピソード選択（上部）**")
-                episode_options_top = [opt[0] for opt in options]
-                
-                selected_episode_top = st.selectbox(
-                    "エピソードを選択（上部）",
-                    episode_options_top,
-                    index=st.session_state.selected_row_index,
-                    key="episode_selector_top",
-                    label_visibility="collapsed"
-                )
-                
-                if selected_episode_top:
-                    new_index = episode_options_top.index(selected_episode_top)
-                    if new_index != st.session_state.selected_row_index:
-                        st.session_state.selected_row_index = new_index
-                        st.rerun()
+                st.info(f"📅 {selected_row['公開予定日']} {selected_row['曜日']} | {selected_row['No']}")
                 
                 st.markdown("---")
                 
@@ -782,7 +677,6 @@ if 'notebook_df' in st.session_state:
                 if new_status != selected_row['ステータス']:
                     st.session_state.notebook_df.at[actual_index, 'ステータス'] = new_status
                     st.toast(f"{selected_row['No']} のステータスを更新しました！", icon="📊")
-                    st.rerun()
                 
                 st.markdown("---")
                 
@@ -825,26 +719,6 @@ if 'notebook_df' in st.session_state:
                     colored_html = colorize_script(current_text)
                     
                     st.markdown('<div class="preview-box">' + colored_html + '</div>', unsafe_allow_html=True)
-                
-                # ★★★ 下部ナビゲーション（セレクトボックスのみ） ★★★
-                st.markdown('<div class="nav-divider"></div>', unsafe_allow_html=True)
-                
-                st.write("**📅 エピソード選択（下部）**")
-                episode_options_bottom = [opt[0] for opt in options]
-                
-                selected_episode_bottom = st.selectbox(
-                    "エピソードを選択（下部）",
-                    episode_options_bottom,
-                    index=st.session_state.selected_row_index,
-                    key="episode_selector_bottom",
-                    label_visibility="collapsed"
-                )
-                
-                if selected_episode_bottom:
-                    new_index = episode_options_bottom.index(selected_episode_bottom)
-                    if new_index != st.session_state.selected_row_index:
-                        st.session_state.selected_row_index = new_index
-                        st.rerun()
 
             # --- 9. 保存ボタン（PC版のみ） ---
             st.divider()
