@@ -58,6 +58,15 @@ st.markdown("""
         border: 1px solid #8D6E63;
         border-radius: 4px;
     }
+    
+    /* クリック可能な行のスタイル */
+    .clickable-row {
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    .clickable-row:hover {
+        background-color: #E6DCCF !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -83,22 +92,16 @@ def load_data_from_sheet(sheet):
     if sheet is None:
         return None
     try:
-        # API制限を避けるため、少し待機
         time.sleep(0.5)
-        
         data = sheet.get_all_records()
         if not data:
             return None
         df = pd.DataFrame(data)
         
-        # カラム名を統一（台本 → 台本メモ）
         if "台本" in df.columns and "台本メモ" not in df.columns:
             df = df.rename(columns={"台本": "台本メモ"})
         
-        # 土日を除外（曜日列を確認）
         df = df[~df["曜日"].isin(["(土)", "(日)"])].reset_index(drop=True)
-        
-        # No列を振り直し
         df["No"] = range(1, len(df) + 1)
         
         return df
@@ -112,11 +115,8 @@ def save_data_to_sheet(sheet, df):
         st.error("シート接続がありません")
         return False
     try:
-        # API制限を避けるため、少し待機
         time.sleep(0.5)
-        
         sheet.clear()
-        # カラム名を統一（台本メモ → 台本）
         save_df = df.copy()
         if "台本メモ" in save_df.columns:
             save_df = save_df.rename(columns={"台本メモ": "台本"})
@@ -133,7 +133,6 @@ def get_weekdays(start_date, end_date):
     weekdays = []
     jp_weekdays = ["(月)", "(火)", "(水)", "(木)", "(金)", "(土)", "(日)"]
     while current <= end_date:
-        # 土日を除外（0=月曜, 4=金曜, 5=土曜, 6=日曜）
         if current.weekday() < 5:
             weekdays.append({
                 "date": current,
@@ -144,17 +143,14 @@ def get_weekdays(start_date, end_date):
 
 def calculate_stock_deadline(df):
     """在庫状況から投稿可能日を計算"""
-    # 「撮影済」「UP済」のデータを抽出
     finished_df = df[df["ステータス"].isin(["撮影済", "UP済"])].copy()
     
     if len(finished_df) == 0:
         return None, "在庫なし", "撮影頑張りましょう！"
     
-    # 公開予定日を日付型に変換
     finished_df["日付"] = pd.to_datetime(finished_df["公開予定日"], format="%m/%d", errors='coerce')
     finished_df["日付"] = finished_df["日付"].apply(lambda x: x.replace(year=datetime.now().year) if pd.notna(x) else None)
     
-    # 最も遅い公開予定日を取得
     max_date = finished_df["日付"].max()
     max_row = finished_df[finished_df["日付"] == max_date].iloc[0]
     
@@ -166,29 +162,63 @@ def calculate_stock_deadline(df):
 # --- 5. メイン処理 ---
 st.title("☕️ アニ無理 制作ノート")
 
+# セッションステート初期化
+if 'selected_row_index' not in st.session_state:
+    st.session_state.selected_row_index = 0
+if 'current_month' not in st.session_state:
+    st.session_state.current_month = 12  # 12月から開始
+if 'current_year' not in st.session_state:
+    st.session_state.current_year = 2025
+
 with st.sidebar:
     st.header("⚙️ 設定")
-    start_date = st.date_input("開始日", datetime(2025, 12, 11))
-    target_end_date = datetime(2026, 2, 28)
+    
+    # 月切り替えボタン
+    st.subheader("📅 月の切り替え")
+    col_prev, col_current, col_next = st.columns([1, 2, 1])
+    
+    with col_prev:
+        if st.button("◀ 前月"):
+            if st.session_state.current_month == 1:
+                st.session_state.current_month = 12
+                st.session_state.current_year -= 1
+            else:
+                st.session_state.current_month -= 1
+            st.rerun()
+    
+    with col_current:
+        st.markdown(f"### {st.session_state.current_year}年 {st.session_state.current_month}月")
+    
+    with col_next:
+        if st.button("次月 ▶"):
+            if st.session_state.current_month == 12:
+                st.session_state.current_month = 1
+                st.session_state.current_year += 1
+            else:
+                st.session_state.current_month += 1
+            st.rerun()
 
-# --- 6. データ初期化・読み込み（初回のみシートから読み込み） ---
+# --- 6. データ初期化・読み込み ---
 sheet = connect_to_gsheets()
 
-# セッション初期化時のみシートから読み込む
 if 'data_loaded' not in st.session_state:
     st.session_state.data_loaded = False
 
 if sheet is not None and not st.session_state.data_loaded:
-    # シートからデータを読み込み（初回のみ）
     sheet_df = load_data_from_sheet(sheet)
     
     if sheet_df is not None and not sheet_df.empty:
-        # シートにデータがある場合（土日は既に除外済み）
         st.session_state.notebook_df = sheet_df
         st.session_state.data_loaded = True
     elif 'notebook_df' not in st.session_state:
-        # 初回起動：新規データを生成（平日のみ）
-        days_data = get_weekdays(start_date, target_end_date)
+        # 選択された月の平日データを生成
+        start_date = datetime(st.session_state.current_year, st.session_state.current_month, 1)
+        if st.session_state.current_month == 12:
+            end_date = datetime(st.session_state.current_year + 1, 1, 1) - timedelta(days=1)
+        else:
+            end_date = datetime(st.session_state.current_year, st.session_state.current_month + 1, 1) - timedelta(days=1)
+        
+        days_data = get_weekdays(start_date, end_date)
         data = []
         for i, d in enumerate(days_data):
             data.append({
@@ -201,13 +231,12 @@ if sheet is not None and not st.session_state.data_loaded:
             })
         st.session_state.notebook_df = pd.DataFrame(data)
         st.session_state.data_loaded = True
-        # 初期データをシートに保存
         save_data_to_sheet(sheet, st.session_state.notebook_df)
 
 if 'notebook_df' in st.session_state:
     df = st.session_state.notebook_df
 
-    # --- 7. 管理指標ダッシュボード（自動計算） ---
+    # --- 7. 管理指標ダッシュボード ---
     finished_count, deadline_text, sub_text = calculate_stock_deadline(df)
     
     if finished_count is None:
@@ -234,8 +263,9 @@ if 'notebook_df' in st.session_state:
 
     with col1:
         st.subheader("🗓 スケジュール帳")
-        st.caption("👇 土日は除外されています（平日のみ表示）")
+        st.caption("👇 行をクリックすると右側の台本が切り替わります")
         
+        # データエディタ（クリック検出用）
         edited_df = st.data_editor(
             st.session_state.notebook_df,
             column_config={
@@ -248,47 +278,59 @@ if 'notebook_df' in st.session_state:
                     required=True
                 ),
                 "タイトル": st.column_config.TextColumn(width="medium"),
-                "台本メモ": st.column_config.TextColumn(disabled=True),
+                "台本メモ": st.column_config.TextColumn(width="small"),
             },
             use_container_width=True,
             height=600,
             hide_index=True,
-            key="data_editor"
+            key="data_editor",
+            on_select="rerun",
+            selection_mode="single-row"
         )
         
-        # データ変更時にセッションステートのみ更新（st.rerunを削除）
         if not edited_df.equals(st.session_state.notebook_df):
             st.session_state.notebook_df = edited_df
 
     with col2:
         st.subheader("🎬 台本を見る・書く")
-        st.info("👇 編集したい動画の日付を選んでください")
         
-        options = []
-        for idx, row in st.session_state.notebook_df.iterrows():
-            display_title = row['タイトル'] if row['タイトル'] else "（タイトル未定）"
-            status_mark = "✅" if row['ステータス'] in ["撮影済", "UP済"] else "📝"
-            label = f"{status_mark} {row['公開予定日']} {row['曜日']} : {display_title}"
-            options.append(label)
+        # 前へ・次へボタン
+        nav_col1, nav_col2, nav_col3 = st.columns([1, 2, 1])
         
-        selected_label = st.selectbox("動画を選択", options)
-        selected_index = options.index(selected_label)
-        selected_row = st.session_state.notebook_df.iloc[selected_index]
+        with nav_col1:
+            if st.button("⬅ 前へ", use_container_width=True):
+                if st.session_state.selected_row_index > 0:
+                    st.session_state.selected_row_index -= 1
+                    st.rerun()
+        
+        with nav_col2:
+            selected_row = st.session_state.notebook_df.iloc[st.session_state.selected_row_index]
+            st.info(f"📅 {selected_row['公開予定日']} {selected_row['曜日']}")
+        
+        with nav_col3:
+            if st.button("次へ ➡", use_container_width=True):
+                if st.session_state.selected_row_index < len(st.session_state.notebook_df) - 1:
+                    st.session_state.selected_row_index += 1
+                    st.rerun()
         
         st.markdown("---")
         st.write(f"**【 No.{selected_row['No']} 】** の台本")
         
+        # リッチテキストエディタ（HTML対応）
         current_text = selected_row["台本メモ"]
+        
+        st.markdown("💡 **使い方**: Notion等からコピーした文字色付きテキストをそのまま貼り付けてください")
+        
         new_text = st.text_area(
             "台本エディタ",
             value=current_text,
             height=450,
-            placeholder="ここに台詞や構成を記入...",
-            key=f"script_{selected_index}"
+            placeholder="ここに台詞や構成を記入...\n\n※文字色付きテキストもそのまま貼り付けOK！",
+            key=f"script_{st.session_state.selected_row_index}"
         )
         
         if new_text != current_text:
-            st.session_state.notebook_df.at[selected_index, "台本メモ"] = new_text
+            st.session_state.notebook_df.at[st.session_state.selected_row_index, "台本メモ"] = new_text
             st.toast(f"No.{selected_row['No']} の台本を更新しました！", icon="💾")
 
     # --- 9. 保存ボタン ---
