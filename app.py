@@ -553,16 +553,19 @@ if 'notebook_df' in st.session_state:
             with col2:
                 st.subheader("🎬 台本を見る・書く")
                 
-                # 前へ・次へボタン（完全修正版）
+                # 前へ・次へボタン（完全修正版 - rerun前にインデックスを更新）
                 nav_col1, nav_col2, nav_col3 = st.columns([1, 2, 1])
                 
+                # ボタンが押される前にインデックスを確認
+                can_go_prev = st.session_state.selected_row_index > 0
+                can_go_next = st.session_state.selected_row_index < len(options) - 1
+                
                 with nav_col1:
-                    prev_disabled = st.session_state.selected_row_index <= 0
-                    if st.button("⬅ 前へ", use_container_width=True, key="prev_button", disabled=prev_disabled):
-                        st.session_state.selected_row_index -= 1
+                    if st.button("⬅ 前へ", use_container_width=True, key="prev_button_nav", disabled=not can_go_prev):
+                        st.session_state.selected_row_index = st.session_state.selected_row_index - 1
                         st.rerun()
                 
-                # 現在選択中の行情報を取得（ボタンの外で）
+                # 現在選択中の行情報を取得
                 actual_index = options[st.session_state.selected_row_index][1]
                 selected_row = st.session_state.notebook_df.loc[actual_index]
                 
@@ -570,9 +573,8 @@ if 'notebook_df' in st.session_state:
                     st.info(f"📅 {selected_row['公開予定日']} {selected_row['曜日']}")
                 
                 with nav_col3:
-                    next_disabled = st.session_state.selected_row_index >= len(options) - 1
-                    if st.button("次へ ➡", use_container_width=True, key="next_button", disabled=next_disabled):
-                        st.session_state.selected_row_index += 1
+                    if st.button("次へ ➡", use_container_width=True, key="next_button_nav", disabled=not can_go_next):
+                        st.session_state.selected_row_index = st.session_state.selected_row_index + 1
                         st.rerun()
                 
                 st.markdown("---")
