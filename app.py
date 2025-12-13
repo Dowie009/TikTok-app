@@ -2,7 +2,7 @@ import streamlit as st
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 import calendar
 import re
 
@@ -11,8 +11,11 @@ st.set_page_config(page_title="TikTok投稿管理", layout="wide")
 
 # デバイス判定（モバイルかPCか）
 def is_mobile():
-    user_agent = st.context.headers.get("User-Agent", "").lower()
-    return any(device in user_agent for device in ["mobile", "android", "iphone"])
+    try:
+        user_agent = st.context.headers.get("User-Agent", "").lower()
+        return any(device in user_agent for device in ["mobile", "android", "iphone"])
+    except:
+        return False
 
 # Google認証情報
 credentials = service_account.Credentials.from_service_account_info(
@@ -34,7 +37,6 @@ def calculate_episode_start(year, month):
     elif year == 2026 and month == 1:
         return 70
     else:
-        # 将来的な拡張用（22営業日/月で計算）
         base_month = 12 if year == 2025 else 1
         base_episode = 48 if year == 2025 else 70
         month_diff = (year - 2025) * 12 + (month - base_month)
@@ -56,7 +58,7 @@ def generate_monthly_schedule(year, month):
             if day == 0:
                 continue
             date = datetime(year, month, day)
-            if date.weekday() < 5:  # 月曜日(0)から金曜日(4)
+            if date.weekday() < 5:
                 schedule.append({
                     "No": f"#{episode_num}",
                     "日付": date.strftime("%Y-%m-%d"),
@@ -126,7 +128,6 @@ def initialize_month(year, month):
         save_data(sheet_name, new_df)
         return new_df
     else:
-        # 既存データとマージ（Noをキーに）
         merged_df = new_df.merge(
             existing_df[["No", "タイトル", "台本", "ステータス"]],
             on="No",
@@ -134,7 +135,6 @@ def initialize_month(year, month):
             suffixes=("", "_existing")
         )
         
-        # 既存データがあれば上書き
         for col in ["タイトル", "台本", "ステータス"]:
             if f"{col}_existing" in merged_df.columns:
                 merged_df[col] = merged_df[f"{col}_existing"].fillna(merged_df[col])
@@ -163,22 +163,15 @@ def render_colored_preview(script_text):
     
     lines = script_text.strip().split("\n")
     for line in lines:
-        # 赤：「」→ Tomomi：「」 (赤色)
         if re.match(r'^赤：「.+」$', line):
             content = line.replace("赤：", "")
             st.markdown(f"**<span style='color:red;'>Tomomi：{content}</span>**", unsafe_allow_html=True)
-        
-        # 青：「」→ 道ゐ：「」 (青色)
         elif re.match(r'^青：「.+」$', line):
             content = line.replace("青：", "")
             st.markdown(f"**<span style='color:blue;'>道ゐ：{content}</span>**", unsafe_allow_html=True)
-        
-        # 黒：「」→ そのまま (黒色)
         elif re.match(r'^黒：「.+」$', line):
             content = line.replace("黒：", "")
             st.markdown(f"<span style='color:black;'>{content}</span>", unsafe_allow_html=True)
-        
-        # それ以外はそのまま表示
         else:
             st.text(line)
 
@@ -191,10 +184,13 @@ if "selected_index" not in st.session_state:
     st.session_state.selected_index = 0
 if "script_index" not in st.session_state:
     st.session_state.script_index = 0
+if "preview_mode" not in st.session_state:
+    st.session_state.preview_mode = False
 
-# サイドバー：月選択（PCのみ）
+# モバイル判定
 mobile_mode = is_mobile()
 
+# サイドバー：月選択（PCのみ）
 if not mobile_mode:
     st.sidebar.header("📅 月を選択")
     year = st.sidebar.selectbox("年", [2025, 2026], index=0, key="year_select")
@@ -220,137 +216,135 @@ st.metric("📦 ストック状況", f"{stock_count}本")
 
 # --- PC版：完全機能 ---
 if not mobile_mode:
-    st.markdown("---")
-    st.subheader("📖 スケジュール帳")
+    # 2カラムレイアウト
+    col_left, col_right = st.columns([1, 1])
     
-    # 一括ステータス更新（折りたたみ式）
-    with st.expander("🔄 一括ステータス更新"):
-        st.caption("範囲指定でまとめてステータスを変更できます")
+    with col_left:
+        st.subheader("📖 スケジュール帳")
         
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            start_ep = st.selectbox("開始エピソード", df["No"].tolist(), key="bulk_start")
-        with col2:
-            end_ep = st.selectbox("終了エピソード", df["No"].tolist(), key="bulk_end")
-        with col3:
-            new_status = st.selectbox("変更先ステータス", ["撮影済", "編集済", "UP済", "台本完", "未"], key="bulk_status")
-        
-        if st.button("一括更新実行"):
-            df = bulk_update_status(df, start_ep, end_ep, new_status)
-            save_data(sheet_name, df)
-            st.success(f"{start_ep} 〜 {end_ep} を「{new_status}」に更新しました！")
-            st.rerun()
-    
-    # ステータス凡例
-    st.caption("**ステータス凡例：** ✅ UP済 | ✂️ 編集済 | 🎬 撮影済 | 📝 台本完 | ⏳ 未")
-    
-    # ラジオボタンでエピソード選択
-    status_icons = {"UP済": "✅", "編集済": "✂️", "撮影済": "🎬", "台本完": "📝", "未": "⏳"}
-    options = [f"{status_icons.get(row['ステータス'], '⏳')} {row['No']} ({row['日付']} {row['曜日']})" for _, row in df.iterrows()]
-    
-    selected_option = st.radio(
-        "エピソードを選択",
-        options,
-        index=st.session_state.selected_index,
-        key="schedule_radio"
-    )
-    
-    # 選択されたインデックスを更新
-    st.session_state.selected_index = options.index(selected_option)
-    selected_row = df.iloc[st.session_state.selected_index]
-    
-    # 編集フォーム
-    st.markdown("---")
-    st.subheader(f"✏️ {selected_row['No']} の詳細")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        title = st.text_input("タイトル", value=selected_row.get("タイトル", ""), key="title_input")
-    with col2:
-        status = st.selectbox(
-            "ステータス",
-            ["未", "台本完", "撮影済", "編集済", "UP済"],
-            index=["未", "台本完", "撮影済", "編集済", "UP済"].index(selected_row.get("ステータス", "未")),
-            key="status_select"
-        )
-    
-    script = st.text_area("台本", value=selected_row.get("台本", ""), height=200, key="script_input")
-    
-    if st.button("💾 保存"):
-        df.at[st.session_state.selected_index, "タイトル"] = title
-        df.at[st.session_state.selected_index, "台本"] = script
-        df.at[st.session_state.selected_index, "ステータス"] = status
-        save_data(sheet_name, df)
-        st.success("保存しました！")
-        st.rerun()
-    
-    # --- 台本を見る・書く ---
-    st.markdown("---")
-    st.subheader("📝 台本を見る・書く")
-    
-    # 編集/プレビュー切り替え
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("✏️ 編集モード", use_container_width=True):
-            st.session_state.preview_mode = False
-    with col2:
-        if st.button("👁️ プレビューモード", use_container_width=True):
-            st.session_state.preview_mode = True
-    
-    # プレビューモードの初期値
-    if "preview_mode" not in st.session_state:
-        st.session_state.preview_mode = False
-    
-    # 前へ・次へナビゲーション
-    nav_col1, nav_col2, nav_col3 = st.columns([1, 2, 1])
-    
-    with nav_col1:
-        if st.button("⬅️ 前へ", key="prev_button"):
-            if st.session_state.script_index > 0:
-                st.session_state.script_index -= 1
+        # 一括ステータス更新
+        with st.expander("🔄 一括ステータス更新"):
+            st.caption("範囲指定でまとめてステータスを変更できます")
+            
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                start_ep = st.selectbox("開始エピソード", df["No"].tolist(), key="bulk_start")
+            with c2:
+                end_ep = st.selectbox("終了エピソード", df["No"].tolist(), key="bulk_end")
+            with c3:
+                new_status = st.selectbox("変更先ステータス", ["撮影済", "編集済", "UP済", "台本完", "未"], key="bulk_status")
+            
+            if st.button("一括更新実行"):
+                df = bulk_update_status(df, start_ep, end_ep, new_status)
+                save_data(sheet_name, df)
+                st.success(f"{start_ep} 〜 {end_ep} を「{new_status}」に更新しました！")
                 st.rerun()
-    
-    with nav_col2:
-        current_script_row = df.iloc[st.session_state.script_index]
-        st.info(f"📌 現在：{current_script_row['No']} - {current_script_row.get('タイトル', 'タイトル未定')}")
-    
-    with nav_col3:
-        if st.button("次へ ➡️", key="next_button"):
-            if st.session_state.script_index < len(df) - 1:
-                st.session_state.script_index += 1
-                st.rerun()
-    
-    # 編集モード
-    if not st.session_state.preview_mode:
-        st.caption("**台本フォーマットガイド:**")
-        st.code("赤：「Tomomiのセリフ」\n青：「Dowie009のセリフ」\n黒：「【ナレーションや指示】」")
         
-        current_script = current_script_row.get("台本", "")
-        edited_script = st.text_area(
-            "台本を編集",
-            value=current_script,
-            height=300,
-            key=f"script_edit_{st.session_state.script_index}"
+        # ステータス凡例
+        st.caption("**ステータス凡例：** ✅ UP済 | ✂️ 編集済 | 🎬 撮影済 | 📝 台本完 | ⏳ 未")
+        
+        # ラジオボタンでエピソード選択
+        status_icons = {"UP済": "✅", "編集済": "✂️", "撮影済": "🎬", "台本完": "📝", "未": "⏳"}
+        options = [f"{status_icons.get(row['ステータス'], '⏳')} {row['No']} ({row['日付']} {row['曜日']})" for _, row in df.iterrows()]
+        
+        selected_option = st.radio(
+            "エピソードを選択",
+            options,
+            index=st.session_state.selected_index,
+            key="schedule_radio"
         )
         
-        if st.button("💾 台本を保存", key="save_script_button"):
-            df.at[st.session_state.script_index, "台本"] = edited_script
+        st.session_state.selected_index = options.index(selected_option)
+        selected_row = df.iloc[st.session_state.selected_index]
+        
+        # 編集フォーム
+        st.markdown("---")
+        st.subheader(f"✏️ {selected_row['No']} の詳細")
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            title = st.text_input("タイトル", value=selected_row.get("タイトル", ""), key="title_input")
+        with c2:
+            status = st.selectbox(
+                "ステータス",
+                ["未", "台本完", "撮影済", "編集済", "UP済"],
+                index=["未", "台本完", "撮影済", "編集済", "UP済"].index(selected_row.get("ステータス", "未")),
+                key="status_select"
+            )
+        
+        script = st.text_area("台本", value=selected_row.get("台本", ""), height=200, key="script_input")
+        
+        if st.button("💾 保存"):
+            df.at[st.session_state.selected_index, "タイトル"] = title
+            df.at[st.session_state.selected_index, "台本"] = script
+            df.at[st.session_state.selected_index, "ステータス"] = status
             save_data(sheet_name, df)
-            st.success(f"{current_script_row['No']} の台本を保存しました！")
+            st.success("保存しました！")
             st.rerun()
     
-    # プレビューモード
-    else:
-        st.markdown("### 🎬 プレビュー")
-        current_script = current_script_row.get("台本", "")
-        render_colored_preview(current_script)
+    with col_right:
+        st.subheader("📝 台本を見る・書く")
+        
+        # 編集/プレビュー切り替え
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("✏️ 編集モード", use_container_width=True):
+                st.session_state.preview_mode = False
+                st.rerun()
+        with c2:
+            if st.button("👁️ プレビューモード", use_container_width=True):
+                st.session_state.preview_mode = True
+                st.rerun()
+        
+        # 前へ・次へナビゲーション
+        nav_c1, nav_c2, nav_c3 = st.columns([1, 2, 1])
+        
+        with nav_c1:
+            if st.button("⬅️ 前へ", key="prev_btn"):
+                if st.session_state.script_index > 0:
+                    st.session_state.script_index -= 1
+                    st.rerun()
+        
+        with nav_c2:
+            current_script_row = df.iloc[st.session_state.script_index]
+            st.info(f"📌 現在：{current_script_row['No']} - {current_script_row.get('タイトル', 'タイトル未定')}")
+        
+        with nav_c3:
+            if st.button("次へ ➡️", key="next_btn"):
+                if st.session_state.script_index < len(df) - 1:
+                    st.session_state.script_index += 1
+                    st.rerun()
+        
+        # 編集モード
+        if not st.session_state.preview_mode:
+            st.caption("**台本フォーマットガイド:**")
+            st.code("赤：「Tomomiのセリフ」\n青：「Dowie009のセリフ」\n黒：「【ナレーションや指示】」")
+            
+            current_script = current_script_row.get("台本", "")
+            edited_script = st.text_area(
+                "台本を編集",
+                value=current_script,
+                height=300,
+                key=f"script_edit_{st.session_state.script_index}"
+            )
+            
+            if st.button("💾 台本を保存", key="save_script_btn"):
+                df.at[st.session_state.script_index, "台本"] = edited_script
+                save_data(sheet_name, df)
+                st.success(f"{current_script_row['No']} の台本を保存しました！")
+                st.rerun()
+        
+        # プレビューモード
+        else:
+            st.markdown("### 🎬 プレビュー")
+            current_script = current_script_row.get("台本", "")
+            render_colored_preview(current_script)
 
 # --- モバイル版：シンプル表示 ---
 else:
     st.markdown("---")
     st.subheader("📖 スケジュール（閲覧専用）")
     
-    # シンプルな表示
     status_icons = {"UP済": "✅", "編集済": "✂️", "撮影済": "🎬", "台本完": "📝", "未": "⏳"}
     
     for _, row in df.iterrows():
@@ -360,7 +354,6 @@ else:
     st.markdown("---")
     st.subheader("📝 台本プレビュー")
     
-    # エピソード選択（シンプル）
     selected_ep = st.selectbox("エピソードを選択", df["No"].tolist(), key="mobile_ep_select")
     selected_row = df[df["No"] == selected_ep].iloc[0]
     
