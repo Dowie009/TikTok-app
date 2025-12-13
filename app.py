@@ -10,10 +10,6 @@ import re
 # --- 1. アプリの設定 ---
 st.set_page_config(page_title="アニ無理 制作ノート", layout="wide", page_icon="☕")
 
-# デバイス判定（簡易版：画面幅で判定）
-# Streamlitには直接のデバイス判定機能がないため、JavaScriptで判定
-is_mobile = st.session_state.get('is_mobile', False)
-
 # --- 2. デザイン (ミルクティー・クラフト紙風 + 水色バー) ---
 st.markdown("""
     <style>
@@ -105,14 +101,6 @@ st.markdown("""
         }
     }
     </style>
-    
-    <script>
-    // デバイス判定をセッションステートに保存
-    const isMobile = window.innerWidth <= 768;
-    if (isMobile) {
-        window.parent.postMessage({type: 'streamlit:setComponentValue', value: true}, '*');
-    }
-    </script>
     """, unsafe_allow_html=True)
 
 # --- 3. スプレッドシート接続機能（キャッシュ付き） ---
@@ -249,15 +237,7 @@ if 'current_month' not in st.session_state:
 if 'current_year' not in st.session_state:
     st.session_state.current_year = 2025
 if 'view_mode' not in st.session_state:
-    st.session_state.view_mode = "preview"  # スマホはデフォルトでプレビュー
-
-# デバイス判定（画面幅による簡易判定）
-# Note: Streamlitでは完全なデバイス判定は難しいため、サイドバーの有無で判定
-try:
-    # サイドバーが非表示 = モバイル と仮定
-    is_mobile = st.session_state.get('force_mobile_mode', False)
-except:
-    is_mobile = False
+    st.session_state.view_mode = "preview"
 
 # モバイルモード切り替え（デバッグ用）
 with st.sidebar:
@@ -267,7 +247,7 @@ with st.sidebar:
     device_mode = st.radio(
         "表示モード",
         options=["🖥 PC版（フル機能）", "📱 スマホ版（閲覧のみ）"],
-        index=0 if not is_mobile else 1
+        index=0
     )
     
     is_mobile = (device_mode == "📱 スマホ版（閲覧のみ）")
@@ -355,30 +335,23 @@ if 'notebook_df' in st.session_state:
             sub_text = "撮影頑張りましょう！"
 
         st.markdown("### 📊 ストック状況")
-        c1, c2, c3 = st.columns(3)
+        c1, c2 = st.columns(2)
         with c1:
             st.metric("出来上がっている本数！", f"{finished_count} 本", "編集済 + UP済")
         with c2:
             st.metric("何月何日まで投稿可能！", deadline_text, sub_text)
-        with c3:
-            total = len(current_month_df)
-            st.write(f"**全体の進行率 ({finished_count}/{total})**")
-            prog_rate = finished_count / total if total > 0 else 0
-            st.progress(prog_rate)
 
         st.divider()
 
         # --- 8. スケジュール一覧 & 台本機能 ---
         if is_mobile:
-            # ========== モバイル版（シンプル） ==========
-            st.subheader("🗓 スケジュール帳")
+            # ========== モバイル版（シンプル・閲覧専用） ==========
+            st.subheader("🗓 スケジュール")
             
             # ステータス凡例
-            st.markdown("""
-            **ステータス：** ✅UP済 | ✂️編集済 | 🎬撮影済 | 📝台本完 | ⏳未
-            """)
+            st.caption("**ステータス：** ✅UP済 | ✂️編集済 | 🎬撮影済 | 📝台本完 | ⏳未")
             
-            # ラジオボタン（閲覧のみ）
+            # エピソード選択リスト
             options = []
             for idx, row in current_month_df.iterrows():
                 display_title = row['タイトル'] if row['タイトル'] else "（タイトル未定）"
@@ -400,27 +373,51 @@ if 'notebook_df' in st.session_state:
             if st.session_state.selected_row_index >= len(options):
                 st.session_state.selected_row_index = 0
             
-            selected_label = st.radio(
-                "台本を選択",
+            # セレクトボックスで選択（よりシンプル）
+            selected_label = st.selectbox(
+                "エピソードを選択",
                 [opt[0] for opt in options],
                 index=st.session_state.selected_row_index,
-                key="row_selector_mobile",
-                label_visibility="collapsed"
+                key="episode_selector_mobile"
             )
             
             if selected_label:
                 new_index = [opt[0] for opt in options].index(selected_label)
-                if new_index != st.session_state.selected_row_index:
-                    st.session_state.selected_row_index = new_index
+                st.session_state.selected_row_index = new_index
             
-            st.divider()
-            
-            # 台本プレビュー（閲覧のみ）
+            # 現在選択中のエピソード情報
             actual_index = options[st.session_state.selected_row_index][1]
             selected_row = st.session_state.notebook_df.loc[actual_index]
             
+            st.divider()
+            
+            # UP済ステータス変更（スマホ版唯一の編集機能）
+            st.subheader("📊 ステータス変更")
+            current_status = selected_row['ステータス']
+            
+            col_status1, col_status2 = st.columns(2)
+            
+            with col_status1:
+                st.info(f"現在：**{current_status}**")
+            
+            with col_status2:
+                if current_status != "UP済":
+                    if st.button("✅ UP済にする", use_container_width=True, type="primary"):
+                        st.session_state.notebook_df.at[actual_index, 'ステータス'] = "UP済"
+                        with st.spinner("保存中..."):
+                            if save_data_to_sheet(sheet, st.session_state.notebook_df):
+                                st.success("✅ UP済に更新しました！")
+                                st.balloons()
+                                time.sleep(1)
+                                st.rerun()
+                else:
+                    st.success("✅ UP済です！")
+            
+            st.divider()
+            
+            # 台本プレビュー（閲覧専用）
             st.subheader(f"🎬 {selected_row['No']} の台本")
-            st.caption(f"{selected_row['公開予定日']} {selected_row['曜日']} | {selected_row['タイトル']}")
+            st.caption(f"📅 {selected_row['公開予定日']} {selected_row['曜日']} | {selected_row['タイトル']}")
             
             current_text = selected_row["台本メモ"]
             colored_html = colorize_script(current_text)
@@ -538,7 +535,11 @@ if 'notebook_df' in st.session_state:
             with col2:
                 st.subheader("🎬 台本を見る・書く")
                 
-                # 前へ・次へボタン
+                # 実際のDataFrameのインデックスを取得
+                actual_index = options[st.session_state.selected_row_index][1]
+                selected_row = st.session_state.notebook_df.loc[actual_index]
+                
+                # 前へ・次へボタン（修正版）
                 nav_col1, nav_col2, nav_col3 = st.columns([1, 2, 1])
                 
                 with nav_col1:
@@ -548,8 +549,6 @@ if 'notebook_df' in st.session_state:
                             st.rerun()
                 
                 with nav_col2:
-                    actual_index = options[st.session_state.selected_row_index][1]
-                    selected_row = st.session_state.notebook_df.loc[actual_index]
                     st.info(f"📅 {selected_row['公開予定日']} {selected_row['曜日']}")
                 
                 with nav_col3:
