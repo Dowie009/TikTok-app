@@ -120,7 +120,16 @@ st.markdown("""
 def connect_to_gsheets():
     """Google Sheetsに接続（キャッシュで再利用）"""
     try:
-        key_dict = json.loads(st.secrets["gcp"]["json_key"])
+        # Secretsから直接辞書型で取得（文字列の場合のみjson.loads）
+        json_key_data = st.secrets["gcp"]["json_key"]
+        
+        if isinstance(json_key_data, str):
+            # 文字列の場合のみパース
+            key_dict = json.loads(json_key_data)
+        else:
+            # 既に辞書型の場合はそのまま使用
+            key_dict = dict(json_key_data)
+        
         creds = Credentials.from_service_account_info(key_dict, scopes=[
             "https://www.googleapis.com/auth/spreadsheets",
             "https://www.googleapis.com/auth/drive"
