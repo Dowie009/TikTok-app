@@ -162,7 +162,7 @@ def update_episode_numbers(df, start_episode=48):
 # --- 4. ロジック関数 ---
 def calculate_stock_deadline(df):
     """在庫状況から投稿可能日を計算"""
-    finished_df = df[df["ステータス"].isin(["撮影済", "UP済"])].copy()
+    finished_df = df[df["ステータス"].isin(["撮影済", "編集済", "UP済"])].copy()
     
     if len(finished_df) == 0:
         return None, "在庫なし", "撮影頑張りましょう！"
@@ -311,7 +311,7 @@ if 'notebook_df' in st.session_state:
         st.markdown("### 📊 ストック状況")
         c1, c2, c3 = st.columns(3)
         with c1:
-            st.metric("出来上がっている本数！", f"{finished_count} 本", "撮影済 + UP済")
+            st.metric("出来上がっている本数！", f"{finished_count} 本", "撮影済 + 編集済 + UP済")
         with c2:
             st.metric("何月何日まで投稿可能！", deadline_text, sub_text)
         with c3:
@@ -332,7 +332,9 @@ if 'notebook_df' in st.session_state:
             # ステータス凡例を表示
             st.markdown("""
             **ステータス表示：**
-            - ✅ 撮影済・UP済
+            - ✅ UP済
+            - ✂️ 編集済
+            - 🎬 撮影済
             - 📝 台本完
             - ⏳ 未
             """)
@@ -344,9 +346,13 @@ if 'notebook_df' in st.session_state:
             for idx, row in current_month_df.iterrows():
                 display_title = row['タイトル'] if row['タイトル'] else "（タイトル未定）"
                 
-                # ステータスに応じたマーク
-                if row['ステータス'] in ["撮影済", "UP済"]:
+                # ステータスに応じたマーク（5種類に拡張）
+                if row['ステータス'] == "UP済":
                     status_mark = "✅"
+                elif row['ステータス'] == "編集済":
+                    status_mark = "✂️"
+                elif row['ステータス'] == "撮影済":
+                    status_mark = "🎬"
                 elif row['ステータス'] == "台本完":
                     status_mark = "📝"
                 else:
@@ -414,8 +420,8 @@ if 'notebook_df' in st.session_state:
             st.write("**🎬 ステータス**")
             new_status = st.selectbox(
                 "ステータスを選択",
-                options=["未", "台本完", "撮影済", "UP済"],
-                index=["未", "台本完", "撮影済", "UP済"].index(selected_row['ステータス']),
+                options=["未", "台本完", "撮影済", "編集済", "UP済"],
+                index=["未", "台本完", "撮影済", "編集済", "UP済"].index(selected_row['ステータス']),
                 key=f"status_{actual_index}",
                 label_visibility="collapsed"
             )
