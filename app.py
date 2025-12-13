@@ -1,7 +1,7 @@
 # ==============================================
 # 🔥 強制リロード設定（キャッシュ無効化）
-# Version: 6.0.0 - 2025-12-13 20:00 JST
-# on_clickコールバック方式ボタン＋1月#62開始
+# Version: 6.1.0 - 2025-12-13 20:30 JST
+# ラジオボタン連動修正＋on_clickボタン改善
 # ==============================================
 
 import streamlit as st
@@ -338,23 +338,11 @@ def colorize_script(script_text):
     
     return ''.join(html_lines)
 
-# --- 5. ナビゲーションボタン用コールバック関数 ---
-def go_previous():
-    """前へボタンのコールバック"""
-    if st.session_state.selected_row_index > 0:
-        st.session_state.selected_row_index -= 1
-
-def go_next():
-    """次へボタンのコールバック"""
-    max_index = st.session_state.get('max_row_index', 0)
-    if st.session_state.selected_row_index < max_index:
-        st.session_state.selected_row_index += 1
-
-# --- 6. メイン処理 ---
+# --- 5. メイン処理 ---
 st.title("☕️ アニ無理 制作ノート")
 
 # バージョン表示（確認用）
-st.markdown('<span class="version-badge">🔄 Version 6.0.0 - on_clickコールバック方式＋1月#62開始</span>', unsafe_allow_html=True)
+st.markdown('<span class="version-badge">🔄 Version 6.1.0 - ラジオボタン連動修正＋ボタン改善</span>', unsafe_allow_html=True)
 
 # セッションステート初期化
 if 'selected_row_index' not in st.session_state:
@@ -449,7 +437,7 @@ with st.sidebar:
             st.success("✅ キャッシュをクリアしました！")
             st.rerun()
 
-# --- 7. データ初期化・読み込み（キャッシュあり） ---
+# --- 6. データ初期化・読み込み（キャッシュあり） ---
 sheet = connect_to_gsheets()
 sheet_df = load_data_from_sheet(sheet)
 
@@ -474,7 +462,7 @@ if 'notebook_df' in st.session_state:
         st.warning(f"{st.session_state.current_year}年{st.session_state.current_month}月のデータがありません")
         st.info("💡 左サイドバーの「月の切り替え」で他の月を確認してください")
     else:
-        # --- 8. 管理指標ダッシュボード ---
+        # --- 7. 管理指標ダッシュボード ---
         finished_count, deadline_text, sub_text = calculate_stock_deadline(current_month_df)
         
         if finished_count is None:
@@ -491,7 +479,7 @@ if 'notebook_df' in st.session_state:
 
         st.divider()
 
-        # --- 9. スケジュール一覧 & 台本機能 ---
+        # --- 8. スケジュール一覧 & 台本機能 ---
         if is_mobile:
             # ========== モバイル版（シンプル・閲覧専用） ==========
             st.subheader("🗓 スケジュール")
@@ -671,10 +659,12 @@ if 'notebook_df' in st.session_state:
                     label_visibility="collapsed"
                 )
                 
+                # ★★★ ラジオボタン変更時にst.rerun()を追加 ★★★
                 if selected_label:
                     new_index = [opt[0] for opt in options].index(selected_label)
                     if new_index != st.session_state.selected_row_index:
                         st.session_state.selected_row_index = new_index
+                        st.rerun()  # 🔥 ここが重要！
 
             with col2:
                 st.subheader("🎬 台本を見る・書く")
@@ -687,25 +677,23 @@ if 'notebook_df' in st.session_state:
                 nav_col1, nav_col2, nav_col3 = st.columns([1, 2, 1])
                 
                 with nav_col1:
-                    st.button(
-                        "⬅ 前へ", 
-                        use_container_width=True, 
-                        key="nav_prev_top",
-                        on_click=go_previous,
-                        disabled=(st.session_state.selected_row_index == 0)
-                    )
+                    if st.session_state.selected_row_index > 0:
+                        if st.button("⬅ 前へ", use_container_width=True, key="nav_prev_top"):
+                            st.session_state.selected_row_index -= 1
+                            st.rerun()  # 🔥 明示的にrerunを呼ぶ
+                    else:
+                        st.button("⬅ 前へ", use_container_width=True, key="nav_prev_top_disabled", disabled=True)
                 
                 with nav_col2:
                     st.info(f"📅 {selected_row['公開予定日']} {selected_row['曜日']}")
                 
                 with nav_col3:
-                    st.button(
-                        "次へ ➡", 
-                        use_container_width=True, 
-                        key="nav_next_top",
-                        on_click=go_next,
-                        disabled=(st.session_state.selected_row_index >= st.session_state.max_row_index)
-                    )
+                    if st.session_state.selected_row_index < st.session_state.max_row_index:
+                        if st.button("次へ ➡", use_container_width=True, key="nav_next_top"):
+                            st.session_state.selected_row_index += 1
+                            st.rerun()  # 🔥 明示的にrerunを呼ぶ
+                    else:
+                        st.button("次へ ➡", use_container_width=True, key="nav_next_top_disabled", disabled=True)
                 
                 st.markdown("---")
                 
@@ -785,27 +773,25 @@ if 'notebook_df' in st.session_state:
                 nav_bottom_col1, nav_bottom_col2, nav_bottom_col3 = st.columns([1, 2, 1])
                 
                 with nav_bottom_col1:
-                    st.button(
-                        "⬅ 前へ", 
-                        use_container_width=True, 
-                        key="nav_prev_bottom",
-                        on_click=go_previous,
-                        disabled=(st.session_state.selected_row_index == 0)
-                    )
+                    if st.session_state.selected_row_index > 0:
+                        if st.button("⬅ 前へ", use_container_width=True, key="nav_prev_bottom"):
+                            st.session_state.selected_row_index -= 1
+                            st.rerun()  # 🔥 明示的にrerunを呼ぶ
+                    else:
+                        st.button("⬅ 前へ", use_container_width=True, key="nav_prev_bottom_disabled", disabled=True)
                 
                 with nav_bottom_col2:
                     st.markdown(f"<center><strong>{selected_row['No']}</strong></center>", unsafe_allow_html=True)
                 
                 with nav_bottom_col3:
-                    st.button(
-                        "次へ ➡", 
-                        use_container_width=True, 
-                        key="nav_next_bottom",
-                        on_click=go_next,
-                        disabled=(st.session_state.selected_row_index >= st.session_state.max_row_index)
-                    )
+                    if st.session_state.selected_row_index < st.session_state.max_row_index:
+                        if st.button("次へ ➡", use_container_width=True, key="nav_next_bottom"):
+                            st.session_state.selected_row_index += 1
+                            st.rerun()  # 🔥 明示的にrerunを呼ぶ
+                    else:
+                        st.button("次へ ➡", use_container_width=True, key="nav_next_bottom_disabled", disabled=True)
 
-            # --- 10. 保存ボタン（PC版のみ） ---
+            # --- 9. 保存ボタン（PC版のみ） ---
             st.divider()
             if st.button("💾 変更をスプレッドシートに保存する", type="primary", use_container_width=True):
                 with st.spinner("保存中..."):
