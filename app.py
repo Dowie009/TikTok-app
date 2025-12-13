@@ -10,6 +10,10 @@ import re
 # --- 1. アプリの設定 ---
 st.set_page_config(page_title="アニ無理 制作ノート", layout="wide", page_icon="☕")
 
+# URLパラメータからモバイルモード判定
+query_params = st.query_params
+is_mobile_from_url = query_params.get("mobile", "false").lower() == "true"
+
 # --- 2. デザイン (ミルクティー・クラフト紙風 + 水色バー) ---
 st.markdown("""
     <style>
@@ -243,17 +247,31 @@ if 'view_mode' not in st.session_state:
 with st.sidebar:
     st.header("⚙️ 設定")
     
-    # デバイスモード切り替え
-    device_mode = st.radio(
-        "表示モード",
-        options=["🖥 PC版（フル機能）", "📱 スマホ版（閲覧のみ）"],
-        index=0
-    )
+    # URLパラメータでモバイルモードが指定されている場合は固定
+    if is_mobile_from_url:
+        st.info("📱 スマホ版で表示中")
+        is_mobile = True
+    else:
+        # デバイスモード切り替え
+        device_mode = st.radio(
+            "表示モード",
+            options=["🖥 PC版（フル機能）", "📱 スマホ版（閲覧のみ）"],
+            index=0
+        )
+        
+        is_mobile = (device_mode == "📱 スマホ版（閲覧のみ）")
     
-    is_mobile = (device_mode == "📱 スマホ版（閲覧のみ）")
+    # スマホ版URLの案内
+    if not is_mobile:
+        st.divider()
+        st.subheader("📱 スマホ版URL")
+        mobile_url = "https://tiktok-app-5wwg8zhowhqokpxasht6tg.streamlit.app?mobile=true"
+        st.code(mobile_url, language=None)
+        st.caption("👆 このURLをスマホで開くと、自動的にスマホ版で表示されます")
     
     if not is_mobile:
         # PC版のみ：月切り替えボタン
+        st.divider()
         st.subheader("📅 月の切り替え")
         col_prev, col_current, col_next = st.columns([1, 2, 1])
         
@@ -535,27 +553,27 @@ if 'notebook_df' in st.session_state:
             with col2:
                 st.subheader("🎬 台本を見る・書く")
                 
-                # 実際のDataFrameのインデックスを取得
-                actual_index = options[st.session_state.selected_row_index][1]
-                selected_row = st.session_state.notebook_df.loc[actual_index]
-                
-                # 前へ・次へボタン（修正版）
+                # 前へ・次へボタン（完全修正版）
                 nav_col1, nav_col2, nav_col3 = st.columns([1, 2, 1])
                 
                 with nav_col1:
-                    if st.button("⬅ 前へ", use_container_width=True, key="prev_button"):
-                        if st.session_state.selected_row_index > 0:
-                            st.session_state.selected_row_index -= 1
-                            st.rerun()
+                    prev_disabled = st.session_state.selected_row_index <= 0
+                    if st.button("⬅ 前へ", use_container_width=True, key="prev_button", disabled=prev_disabled):
+                        st.session_state.selected_row_index -= 1
+                        st.rerun()
+                
+                # 現在選択中の行情報を取得（ボタンの外で）
+                actual_index = options[st.session_state.selected_row_index][1]
+                selected_row = st.session_state.notebook_df.loc[actual_index]
                 
                 with nav_col2:
                     st.info(f"📅 {selected_row['公開予定日']} {selected_row['曜日']}")
                 
                 with nav_col3:
-                    if st.button("次へ ➡", use_container_width=True, key="next_button"):
-                        if st.session_state.selected_row_index < len(options) - 1:
-                            st.session_state.selected_row_index += 1
-                            st.rerun()
+                    next_disabled = st.session_state.selected_row_index >= len(options) - 1
+                    if st.button("次へ ➡", use_container_width=True, key="next_button", disabled=next_disabled):
+                        st.session_state.selected_row_index += 1
+                        st.rerun()
                 
                 st.markdown("---")
                 
