@@ -64,13 +64,28 @@ st.markdown("""
     .red-text {
         color: #E53935 !important;
         font-weight: bold;
+        font-size: 1.1em;
+        line-height: 1.8;
     }
     .blue-text {
         color: #1E88E5 !important;
         font-weight: bold;
+        font-size: 1.1em;
+        line-height: 1.8;
     }
     .black-text {
         color: #212121 !important;
+        font-size: 1.0em;
+        line-height: 1.8;
+    }
+    
+    /* プレビューエリアの背景 */
+    .preview-box {
+        background-color: #FFFAF0;
+        padding: 20px;
+        border-radius: 8px;
+        border: 2px solid #A1887F;
+        min-height: 300px;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -167,23 +182,28 @@ def calculate_stock_deadline(df):
 def colorize_script(script_text):
     """台本テキストを色付きHTMLに変換（シンプル版）"""
     if not script_text:
-        return ""
+        return "<p class='black-text'>台本を入力してください</p>"
     
     lines = script_text.split('\n')
     html_lines = []
     
     for line in lines:
+        line = line.strip()
+        if not line:
+            html_lines.append("<br>")
+            continue
+            
         # 赤：「」パターン
-        if line.strip().startswith('赤：'):
-            content = re.sub(r'^赤：', '', line.strip())
+        if line.startswith('赤：'):
+            content = re.sub(r'^赤：', '', line)
             html_lines.append(f'<p class="red-text">赤：{content}</p>')
         # 青：「」パターン
-        elif line.strip().startswith('青：'):
-            content = re.sub(r'^青：', '', line.strip())
+        elif line.startswith('青：'):
+            content = re.sub(r'^青：', '', line)
             html_lines.append(f'<p class="blue-text">青：{content}</p>')
         # 黒：「」パターン
-        elif line.strip().startswith('黒：'):
-            content = re.sub(r'^黒：', '', line.strip())
+        elif line.startswith('黒：'):
+            content = re.sub(r'^黒：', '', line)
             html_lines.append(f'<p class="black-text">黒：{content}</p>')
         # その他の行（通常表示）
         else:
@@ -201,6 +221,8 @@ if 'current_month' not in st.session_state:
     st.session_state.current_month = 12  # 12月から開始
 if 'current_year' not in st.session_state:
     st.session_state.current_year = 2025
+if 'view_mode' not in st.session_state:
+    st.session_state.view_mode = "edit"  # "edit" or "preview"
 
 with st.sidebar:
     st.header("⚙️ 設定")
@@ -381,42 +403,46 @@ if 'notebook_df' in st.session_state:
                     st.rerun()
         
         st.markdown("---")
+        
+        # 編集/プレビュー切り替えボタン
+        mode_col1, mode_col2 = st.columns(2)
+        
+        with mode_col1:
+            if st.button("✏️ 編集モード", use_container_width=True, 
+                        type="primary" if st.session_state.view_mode == "edit" else "secondary"):
+                st.session_state.view_mode = "edit"
+                st.rerun()
+        
+        with mode_col2:
+            if st.button("👁 プレビューモード", use_container_width=True,
+                        type="primary" if st.session_state.view_mode == "preview" else "secondary"):
+                st.session_state.view_mode = "preview"
+                st.rerun()
+        
         st.write(f"**【 No.{selected_row['No']} 】** の台本")
         
-        # 台本エディタ
         current_text = selected_row["台本メモ"]
         
-        new_text = st.text_area(
-            "台本エディタ（編集モード）",
-            value=current_text,
-            height=250,
-            placeholder="ここに台本を記入...\n\n例：\n赤：「こんにちは！」\n青：「よろしく！」\n黒：「【ナレーション】」",
-            key=f"script_{st.session_state.selected_row_index}"
-        )
-        
-        if new_text != current_text:
-            st.session_state.notebook_df.at[st.session_state.selected_row_index, "台本メモ"] = new_text
-            st.toast(f"No.{selected_row['No']} の台本を更新しました！", icon="💾")
-        
-        # プレビューボタン
-        if st.button("👁 プレビュー（色付き表示）", use_container_width=True):
-            st.session_state.show_preview = True
-        
-        # プレビュー表示
-        if 'show_preview' in st.session_state and st.session_state.show_preview:
-            st.markdown("---")
-            st.markdown("### 🎨 プレビュー")
+        # モードに応じた表示切り替え
+        if st.session_state.view_mode == "edit":
+            # 編集モード
+            new_text = st.text_area(
+                "台本エディタ（編集モード）",
+                value=current_text,
+                height=400,
+                placeholder="ここに台本を記入...\n\n例：\n赤：「こんにちは！」\n青：「よろしく！」\n黒：「【ナレーション】」",
+                key=f"script_{st.session_state.selected_row_index}"
+            )
             
-            colored_html = colorize_script(new_text)
+            if new_text != current_text:
+                st.session_state.notebook_df.at[st.session_state.selected_row_index, "台本メモ"] = new_text
+                st.toast(f"No.{selected_row['No']} の台本を更新しました！", icon="💾")
+        
+        else:
+            # プレビューモード
+            colored_html = colorize_script(current_text)
             
-            if colored_html:
-                st.markdown(colored_html, unsafe_allow_html=True)
-            else:
-                st.info("台本を入力してください")
-            
-            if st.button("✖ プレビューを閉じる"):
-                st.session_state.show_preview = False
-                st.rerun()
+            st.markdown('<div class="preview-box">' + colored_html + '</div>', unsafe_allow_html=True)
 
     # --- 9. 保存ボタン ---
     st.divider()
