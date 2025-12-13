@@ -108,7 +108,7 @@ def connect_to_gsheets():
         return None
 
 def load_data_from_sheet(sheet):
-    """シートからデータを読み込み（土日を自動除外）"""
+    """シートからデータを読み込み"""
     if sheet is None:
         return None
     try:
@@ -121,7 +121,6 @@ def load_data_from_sheet(sheet):
         if "台本" in df.columns and "台本メモ" not in df.columns:
             df = df.rename(columns={"台本": "台本メモ"})
         
-        # 土日を除外しない（既存データをそのまま使用）
         return df
     except Exception as e:
         st.warning(f"データ読み込みエラー: {e}")
@@ -143,6 +142,22 @@ def save_data_to_sheet(sheet, df):
     except Exception as e:
         st.error(f"保存エラー: {e}")
         return False
+
+def update_episode_numbers(df, start_episode=48):
+    """エピソード番号を更新（#48から開始）"""
+    # Noが数字のみの場合、#48形式に変換
+    for idx, row in df.iterrows():
+        current_no = str(row['No'])
+        if current_no.isdigit():
+            # 数字のみの場合、#を付けて48から開始
+            new_no = f"#{start_episode + int(current_no) - 1}"
+            df.at[idx, 'No'] = new_no
+        elif not current_no.startswith('#'):
+            # #がない場合、#を付ける
+            if current_no.isdigit():
+                df.at[idx, 'No'] = f"#{current_no}"
+    
+    return df
 
 # --- 4. ロジック関数 ---
 def calculate_stock_deadline(df):
@@ -264,8 +279,13 @@ if sheet is not None and not st.session_state.data_loaded:
     sheet_df = load_data_from_sheet(sheet)
     
     if sheet_df is not None and not sheet_df.empty:
+        # エピソード番号を更新（#48から開始）
+        sheet_df = update_episode_numbers(sheet_df, start_episode=48)
         st.session_state.notebook_df = sheet_df
         st.session_state.data_loaded = True
+        
+        # 更新したエピソード番号を保存
+        save_data_to_sheet(sheet, st.session_state.notebook_df)
     else:
         st.error("⚠️ Google Sheetsにデータがありません")
         st.info("先にGoogle Sheetsにデータを入力してください")
