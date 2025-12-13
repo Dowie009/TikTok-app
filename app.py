@@ -104,6 +104,15 @@ st.markdown("""
             font-size: 1.2em !important;
         }
     }
+    
+    /* デバッグ用スタイル */
+    .debug-box {
+        background-color: #FFF3E0;
+        border: 2px solid #FF9800;
+        padding: 10px;
+        border-radius: 5px;
+        margin: 10px 0;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -170,7 +179,7 @@ def save_data_to_sheet(sheet, df):
         return False
 
 def update_episode_numbers(df, start_episode=48):
-    """エピソード番号を更新（#48から開始）"""
+    """エピソード番号を更新（#48から開始、#100まで対応）"""
     for idx, row in df.iterrows():
         current_no = str(row['No'])
         if current_no.isdigit():
@@ -242,12 +251,15 @@ if 'current_year' not in st.session_state:
     st.session_state.current_year = 2025
 if 'view_mode' not in st.session_state:
     st.session_state.view_mode = "preview"
-if 'nav_action' not in st.session_state:
-    st.session_state.nav_action = None
+if 'debug_mode' not in st.session_state:
+    st.session_state.debug_mode = False
 
 # モバイルモード切り替え（デバッグ用）
 with st.sidebar:
     st.header("⚙️ 設定")
+    
+    # デバッグモードトグル
+    st.session_state.debug_mode = st.checkbox("🐛 デバッグモード", value=st.session_state.debug_mode)
     
     # URLパラメータでモバイルモードが指定されている場合は固定
     if is_mobile_from_url:
@@ -555,26 +567,29 @@ if 'notebook_df' in st.session_state:
             with col2:
                 st.subheader("🎬 台本を見る・書く")
                 
-                # ナビゲーションアクションの処理（ボタンより前に実行）
-                if st.session_state.nav_action == 'prev' and st.session_state.selected_row_index > 0:
-                    st.session_state.selected_row_index -= 1
-                    st.session_state.nav_action = None
-                    st.rerun()
-                elif st.session_state.nav_action == 'next' and st.session_state.selected_row_index < len(options) - 1:
-                    st.session_state.selected_row_index += 1
-                    st.session_state.nav_action = None
-                    st.rerun()
+                # デバッグ情報表示
+                if st.session_state.debug_mode:
+                    st.markdown('<div class="debug-box">', unsafe_allow_html=True)
+                    st.write(f"**🐛 デバッグ情報**")
+                    st.write(f"- 現在のインデックス: `{st.session_state.selected_row_index}`")
+                    st.write(f"- 全エピソード数: `{len(options)}`")
+                    st.write(f"- 前へ可能: `{st.session_state.selected_row_index > 0}`")
+                    st.write(f"- 次へ可能: `{st.session_state.selected_row_index < len(options) - 1}`")
+                    st.markdown('</div>', unsafe_allow_html=True)
                 
-                # 前へ・次へボタン（最終修正版）
+                # 前へ・次へボタン（シンプル版 - 直接操作）
                 nav_col1, nav_col2, nav_col3 = st.columns([1, 2, 1])
                 
-                can_go_prev = st.session_state.selected_row_index > 0
-                can_go_next = st.session_state.selected_row_index < len(options) - 1
-                
                 with nav_col1:
-                    if st.button("⬅ 前へ", use_container_width=True, key="prev_button_nav", disabled=not can_go_prev):
-                        st.session_state.nav_action = 'prev'
-                        st.rerun()
+                    # 前へボタン
+                    if st.session_state.selected_row_index > 0:
+                        if st.button("⬅ 前へ", use_container_width=True, key="btn_prev"):
+                            st.session_state.selected_row_index -= 1
+                            if st.session_state.debug_mode:
+                                st.success(f"前へボタンが押されました！新しいインデックス: {st.session_state.selected_row_index}")
+                            st.rerun()
+                    else:
+                        st.button("⬅ 前へ", use_container_width=True, key="btn_prev_disabled", disabled=True)
                 
                 # 現在選択中の行情報を取得
                 actual_index = options[st.session_state.selected_row_index][1]
@@ -584,9 +599,15 @@ if 'notebook_df' in st.session_state:
                     st.info(f"📅 {selected_row['公開予定日']} {selected_row['曜日']}")
                 
                 with nav_col3:
-                    if st.button("次へ ➡", use_container_width=True, key="next_button_nav", disabled=not can_go_next):
-                        st.session_state.nav_action = 'next'
-                        st.rerun()
+                    # 次へボタン
+                    if st.session_state.selected_row_index < len(options) - 1:
+                        if st.button("次へ ➡", use_container_width=True, key="btn_next"):
+                            st.session_state.selected_row_index += 1
+                            if st.session_state.debug_mode:
+                                st.success(f"次へボタンが押されました！新しいインデックス: {st.session_state.selected_row_index}")
+                            st.rerun()
+                    else:
+                        st.button("次へ ➡", use_container_width=True, key="btn_next_disabled", disabled=True)
                 
                 st.markdown("---")
                 
