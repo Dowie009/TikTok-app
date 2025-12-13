@@ -327,6 +327,63 @@ if 'notebook_df' in st.session_state:
 
         with col1:
             st.subheader("🗓 スケジュール帳")
+            
+            # --- 一括ステータス更新機能 ---
+            with st.expander("📌 一括ステータス更新", expanded=False):
+                st.caption("範囲を指定して、複数のエピソードのステータスを一度に変更できます")
+                
+                bulk_col1, bulk_col2, bulk_col3 = st.columns(3)
+                
+                # エピソード番号のリストを作成
+                episode_list = current_month_df['No'].tolist()
+                
+                with bulk_col1:
+                    start_episode = st.selectbox(
+                        "開始エピソード",
+                        options=episode_list,
+                        key="bulk_start"
+                    )
+                
+                with bulk_col2:
+                    end_episode = st.selectbox(
+                        "終了エピソード",
+                        options=episode_list,
+                        index=len(episode_list)-1 if len(episode_list) > 0 else 0,
+                        key="bulk_end"
+                    )
+                
+                with bulk_col3:
+                    bulk_status = st.selectbox(
+                        "変更先ステータス",
+                        options=["未", "台本完", "撮影済", "編集済", "UP済"],
+                        key="bulk_status"
+                    )
+                
+                if st.button("✅ 一括更新を実行", type="primary", use_container_width=True):
+                    # 開始と終了のインデックスを取得
+                    try:
+                        start_idx = episode_list.index(start_episode)
+                        end_idx = episode_list.index(end_episode)
+                        
+                        if start_idx > end_idx:
+                            st.error("⚠️ 開始エピソードは終了エピソードより前にしてください")
+                        else:
+                            # 範囲内のエピソードを更新
+                            update_count = 0
+                            for i in range(start_idx, end_idx + 1):
+                                episode_no = episode_list[i]
+                                # DataFrameの該当行を更新
+                                mask = st.session_state.notebook_df['No'] == episode_no
+                                st.session_state.notebook_df.loc[mask, 'ステータス'] = bulk_status
+                                update_count += 1
+                            
+                            st.success(f"✅ {start_episode} 〜 {end_episode} の {update_count}件を「{bulk_status}」に更新しました！")
+                            st.balloons()
+                            time.sleep(1)
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"エラーが発生しました: {e}")
+            
             st.caption("👇 ラジオボタンで行を選択すると、右側の台本が切り替わります")
             
             # ステータス凡例を表示
@@ -346,7 +403,7 @@ if 'notebook_df' in st.session_state:
             for idx, row in current_month_df.iterrows():
                 display_title = row['タイトル'] if row['タイトル'] else "（タイトル未定）"
                 
-                # ステータスに応じたマーク（5種類に拡張）
+                # ステータスに応じたマーク（5種類）
                 if row['ステータス'] == "UP済":
                     status_mark = "✅"
                 elif row['ステータス'] == "編集済":
@@ -375,8 +432,9 @@ if 'notebook_df' in st.session_state:
             
             # 選択された行のインデックスを更新
             if selected_label:
-                st.session_state.selected_row_index = [opt[0] for opt in options].index(selected_label)
-                actual_index = options[st.session_state.selected_row_index][1]
+                new_index = [opt[0] for opt in options].index(selected_label)
+                if new_index != st.session_state.selected_row_index:
+                    st.session_state.selected_row_index = new_index
 
         with col2:
             st.subheader("🎬 台本を見る・書く")
@@ -385,7 +443,7 @@ if 'notebook_df' in st.session_state:
             nav_col1, nav_col2, nav_col3 = st.columns([1, 2, 1])
             
             with nav_col1:
-                if st.button("⬅ 前へ", use_container_width=True):
+                if st.button("⬅ 前へ", use_container_width=True, key="prev_button"):
                     if st.session_state.selected_row_index > 0:
                         st.session_state.selected_row_index -= 1
                         st.rerun()
@@ -396,7 +454,7 @@ if 'notebook_df' in st.session_state:
                 st.info(f"📅 {selected_row['公開予定日']} {selected_row['曜日']}")
             
             with nav_col3:
-                if st.button("次へ ➡", use_container_width=True):
+                if st.button("次へ ➡", use_container_width=True, key="next_button"):
                     if st.session_state.selected_row_index < len(options) - 1:
                         st.session_state.selected_row_index += 1
                         st.rerun()
