@@ -180,7 +180,7 @@ def calculate_stock_deadline(df):
     return len(finished_df), deadline_text, sub_text
 
 def colorize_script(script_text):
-    """台本テキストを色付きHTMLに変換（シンプル版）"""
+    """台本テキストを色付きHTMLに変換（名前表示版）"""
     if not script_text:
         return "<p class='black-text'>台本を入力してください</p>"
     
@@ -193,18 +193,18 @@ def colorize_script(script_text):
             html_lines.append("<br>")
             continue
             
-        # 赤：「」パターン
+        # 赤：「」パターン → Tomomi：「」に変換
         if line.startswith('赤：'):
             content = re.sub(r'^赤：', '', line)
-            html_lines.append(f'<p class="red-text">赤：{content}</p>')
-        # 青：「」パターン
+            html_lines.append(f'<p class="red-text">Tomomi：{content}</p>')
+        # 青：「」パターン → 道ゐ：「」に変換
         elif line.startswith('青：'):
             content = re.sub(r'^青：', '', line)
-            html_lines.append(f'<p class="blue-text">青：{content}</p>')
-        # 黒：「」パターン
+            html_lines.append(f'<p class="blue-text">道ゐ：{content}</p>')
+        # 黒：「」パターン → そのまま表示
         elif line.startswith('黒：'):
             content = re.sub(r'^黒：', '', line)
-            html_lines.append(f'<p class="black-text">黒：{content}</p>')
+            html_lines.append(f'<p class="black-text">{content}</p>')
         # その他の行（通常表示）
         else:
             html_lines.append(f'<p class="black-text">{line}</p>')
@@ -259,12 +259,13 @@ with st.sidebar:
     st.markdown("""
     **正しい書き方：**
     - `赤：「Tomomiのセリフ」`
-    - `青：「Dowie009のセリフ」`
+    - `青：「道ゐのセリフ」`
     - `黒：「ナレーション」`
     
-    **NGな書き方：**
-    - ~~`赤：Tomomi：「セリフ」`~~
-    - ~~`赤： 「セリフ」`~~
+    **プレビュー表示：**
+    - 赤 → **Tomomi：** （赤色）
+    - 青 → **道ゐ：** （青色）
+    - 黒 → そのまま（黒色）
     """)
 
 # --- 6. データ初期化・読み込み ---
@@ -353,32 +354,6 @@ if 'notebook_df' in st.session_state:
         # 選択された行のインデックスを更新
         if selected_label:
             st.session_state.selected_row_index = options.index(selected_label)
-        
-        st.divider()
-        
-        # データエディタ
-        edited_df = st.data_editor(
-            st.session_state.notebook_df,
-            column_config={
-                "No": st.column_config.NumberColumn(width="small", disabled=True),
-                "公開予定日": st.column_config.TextColumn(width="small", disabled=True),
-                "曜日": st.column_config.TextColumn(width="small", disabled=True),
-                "ステータス": st.column_config.SelectboxColumn(
-                    options=["未", "台本完", "撮影済", "UP済"],
-                    width="small",
-                    required=True
-                ),
-                "タイトル": st.column_config.TextColumn(width="medium"),
-                "台本メモ": st.column_config.TextColumn(width="small"),
-            },
-            use_container_width=True,
-            height=400,
-            hide_index=True,
-            key="data_editor"
-        )
-        
-        if not edited_df.equals(st.session_state.notebook_df):
-            st.session_state.notebook_df = edited_df
 
     with col2:
         st.subheader("🎬 台本を見る・書く")
