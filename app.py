@@ -1,7 +1,7 @@
 # ==============================================
 # 🔥 強制リロード設定（キャッシュ無効化）
-# Version: 8.1.0 - 2025-12-13 22:30 JST
-# スマホ版ナビ強化＋無限ループ修正
+# Version: 8.2.0 - 2025-12-13 23:00 JST
+# スケジュール一覧表示復活版
 # ==============================================
 
 import streamlit as st
@@ -347,7 +347,7 @@ def colorize_script(script_text):
 st.title("☕️ アニ無理 制作ノート")
 
 # バージョン表示（確認用）
-st.markdown('<span class="version-badge">🔄 Version 8.1.0 - スマホ版ナビ強化（無限ループ修正）</span>', unsafe_allow_html=True)
+st.markdown('<span class="version-badge">🔄 Version 8.2.0 - スケジュール一覧表示復活</span>', unsafe_allow_html=True)
 
 # セッションステート初期化
 if 'selected_row_index' not in st.session_state:
@@ -486,7 +486,7 @@ if 'notebook_df' in st.session_state:
 
         # --- 8. スケジュール一覧 & 台本機能 ---
         if is_mobile:
-            # ========== モバイル版（ナビゲーション強化版 - rerun削減） ==========
+            # ========== モバイル版（ナビゲーション強化版） ==========
             st.subheader("🗓 スケジュール")
             
             st.caption("**ステータス：** ✅UP済 | ✂️編集済 | 🎬撮影済 | 📝台本完 | ⏳未")
@@ -532,12 +532,10 @@ if 'notebook_df' in st.session_state:
                     label_visibility="collapsed"
                 )
                 
-                # 🔥 rerun条件を厳格化
                 if selected_label:
                     new_index = [opt[0] for opt in options].index(selected_label)
                     if new_index != st.session_state.selected_row_index:
                         st.session_state.selected_row_index = new_index
-                        # セレクトボックス変更時のみrerun
             
             with nav_col3:
                 if st.button("➡", key="mobile_next_top", disabled=(st.session_state.selected_row_index >= max_index), use_container_width=True):
@@ -580,7 +578,7 @@ if 'notebook_df' in st.session_state:
             
             st.markdown('<div class="preview-box">' + colored_html + '</div>', unsafe_allow_html=True)
             
-            # ★★★ 下部ナビゲーション（ボタンのみ - セレクトボックス削除） ★★★
+            # ★★★ 下部ナビゲーション（ボタンのみ） ★★★
             st.markdown('<div class="nav-divider"></div>', unsafe_allow_html=True)
             
             nav_bottom_col1, nav_bottom_col2, nav_bottom_col3 = st.columns([1, 2, 1])
@@ -599,15 +597,26 @@ if 'notebook_df' in st.session_state:
                     st.rerun()
             
         else:
-            # ========== PC版（変更なし） ==========
+            # ========== PC版（ラジオボタン一覧表示） ==========
             col1, col2 = st.columns([1.3, 1])
 
             with col1:
                 st.subheader("🗓 スケジュール帳")
                 
-                st.caption("👇 セレクトボックスでエピソードを選択してください")
+                st.caption("👇 ラジオボタンで行を選択すると、右側の台本が切り替わります")
                 
-                # エピソード選択
+                st.markdown("""
+                **ステータス表示：**
+                - ✅ UP済
+                - ✂️ 編集済
+                - 🎬 撮影済
+                - 📝 台本完
+                - ⏳ 未
+                """)
+                
+                st.divider()
+                
+                # ★★★ ラジオボタンによる行選択（一覧表示） ★★★
                 options = []
                 for idx, row in current_month_df.iterrows():
                     display_title = row['タイトル'] if row['タイトル'] else "（タイトル未定）"
@@ -629,16 +638,18 @@ if 'notebook_df' in st.session_state:
                 if st.session_state.selected_row_index >= len(options):
                     st.session_state.selected_row_index = 0
                 
-                selected_label = st.selectbox(
+                selected_label = st.radio(
                     "台本を選択",
                     [opt[0] for opt in options],
                     index=st.session_state.selected_row_index,
-                    key="row_selector"
+                    key="row_selector",
+                    label_visibility="collapsed"
                 )
                 
                 if selected_label:
                     new_index = [opt[0] for opt in options].index(selected_label)
-                    st.session_state.selected_row_index = new_index
+                    if new_index != st.session_state.selected_row_index:
+                        st.session_state.selected_row_index = new_index
 
             with col2:
                 st.subheader("🎬 台本を見る・書く")
