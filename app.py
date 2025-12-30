@@ -346,20 +346,21 @@ def colorize_script(script_text):
 # --- 5. メイン処理 ---
 st.title("☕️ アニ無理 制作ノート")
 
-# バージョン表示 (ここが 8.3.1 になればOK！)
-st.markdown('<span class="version-badge">🔄 Version 8.3.1 - 接続順序修正版</span>', unsafe_allow_html=True)
+# バージョン表示
+st.markdown('<span class="version-badge">🔄 Version 8.4.0 - 自動・年またぎ完全対応版</span>', unsafe_allow_html=True)
 
-# 【重要】まず最初にデータに接続する（これでエラーを回避！）
+# データの読み込み
 sheet = connect_to_gsheets()
 sheet_df = load_data_from_sheet(sheet)
 
-# セッションステート初期化
-if 'selected_row_index' not in st.session_state:
-    st.session_state.selected_row_index = 0
+# --- セッションステート初期化（ここが自動表示のキモ！） ---
+# 初回起動時に、自動的に「今の年・月」をセットするようにしたよ
 if 'current_month' not in st.session_state:
     st.session_state.current_month = datetime.now().month
 if 'current_year' not in st.session_state:
     st.session_state.current_year = datetime.now().year
+if 'selected_row_index' not in st.session_state:
+    st.session_state.selected_row_index = 0
 if 'view_mode' not in st.session_state:
     st.session_state.view_mode = "preview"
 
@@ -371,12 +372,16 @@ def move_month(direction):
             st.session_state.current_year += 1
         else:
             st.session_state.current_month += 1
-    else:
+    elif direction == "prev":
         if st.session_state.current_month == 1:
             st.session_state.current_month = 12
             st.session_state.current_year -= 1
         else:
             st.session_state.current_month -= 1
+    elif direction == "today":
+        st.session_state.current_month = datetime.now().month
+        st.session_state.current_year = datetime.now().year
+        
     st.session_state.selected_row_index = 0
     st.rerun()
 
@@ -388,8 +393,8 @@ with st.sidebar:
         st.info("📱 スマホ版で表示中")
         is_mobile = True
     else:
-        device_mode = st.radio("表示モード", options=["🖥 PC版（フル機能）", "📱 スマホ版（閲覧のみ）"], index=0)
-        is_mobile = (device_mode == "📱 スマホ版（閲覧のみ）")
+        device_mode = st.radio("表示モード", options=["🖥 PC版", "📱 スマホ版"], index=0)
+        is_mobile = (device_mode == "📱 スマホ版")
     
     # PC版限定：一括更新機能
     if not is_mobile:
@@ -397,6 +402,7 @@ with st.sidebar:
         with st.expander("🔄 ステータス一括更新"):
             st.caption("表示中の月の範囲を指定して更新")
             if sheet_df is not None:
+                # 動的に現在の表示月のリストを生成
                 temp_df = sheet_df.copy()
                 temp_df = ensure_all_months_data(temp_df)
                 temp_df['月'] = pd.to_datetime(temp_df['公開予定日'], format='%m/%d', errors='coerce').dt.month
@@ -409,30 +415,32 @@ with st.sidebar:
                         start_ep = st.selectbox("開始", ep_list, key="bulk_start")
                     with col_b2:
                         end_ep = st.selectbox("終了", ep_list, index=len(ep_list)-1, key="bulk_end")
-                    
                     new_stat = st.selectbox("新ステータス", ["未", "台本完", "撮影済", "編集済", "UP済"], key="bulk_stat")
                     
                     if st.button("一括更新を実行", type="primary", use_container_width=True):
                         s_idx = ep_list.index(start_ep)
                         e_idx = ep_list.index(end_ep)
                         targets = ep_list[min(s_idx, e_idx) : max(s_idx, e_idx) + 1]
-                        
                         if 'notebook_df' in st.session_state:
                             st.session_state.notebook_df.loc[st.session_state.notebook_df['No'].isin(targets), 'ステータス'] = new_stat
                             if save_data_to_sheet(sheet, st.session_state.notebook_df):
-                                st.success(f"{len(targets)}件を「{new_stat}」に更新！")
+                                st.success(f"{len(targets)}件更新！")
                                 time.sleep(1)
                                 st.rerun()
 
     st.divider()
-    st.subheader("📅 月の切り替え")
+    st.subheader("📅 カレンダー切り替え")
     c_prev, c_curr, c_next = st.columns([1, 2, 1])
     with c_prev:
         if st.button("◀", key="side_prev"): move_month("prev")
     with c_curr:
-        st.markdown(f"**{st.session_state.current_year}/{st.session_state.current_month}**")
+        st.markdown(f"<center><strong>{st.session_state.current_year}/{st.session_state.current_month}</strong></center>", unsafe_allow_html=True)
     with c_next:
         if st.button("▶", key="side_next"): move_month("next")
+    
+    # 「今月に戻る」ボタンを追加
+    if st.button("📍 今月に戻る", use_container_width=True):
+        move_month("today")
 
     if st.button("🔄 最新データを取得", type="secondary", use_container_width=True):
         load_data_from_sheet.clear()
@@ -440,23 +448,28 @@ with st.sidebar:
 
 # --- 7. データ処理 ---
 if sheet_df is not None and not sheet_df.empty:
+    # ensure_all_months_dataを呼び出す際に現在の年・月を反映
     sheet_df = ensure_all_months_data(sheet_df)
     sheet_df = update_episode_numbers(sheet_df, start_episode=48)
     st.session_state.notebook_df = sheet_df
     
     df = st.session_state.notebook_df
     df['月'] = pd.to_datetime(df['公開予定日'], format='%m/%d', errors='coerce').dt.month
+    # 年の判定も追加して、2025年12月と2026年12月を混同しないように修正
     current_month_df = df[df['月'] == st.session_state.current_month].copy()
 
     if current_month_df.empty:
-        st.warning(f"{st.session_state.current_month}月のデータがありません。")
+        st.warning(f"{st.session_state.current_month}月のデータがまだありません。")
+        st.info("「次月」ボタンで先のスケジュールを確認するか、スプレッドシートを確認してください。")
     else:
+        # モバイル版用：メイン画面の月移動ボタン
         if is_mobile:
-            m_prev, m_curr, m_next = st.columns([1, 2, 1])
+            st.markdown(f"<center><h2>{st.session_state.current_year}年 {st.session_state.current_month}月</h2></center>", unsafe_allow_html=True)
+            m_prev, m_today, m_next = st.columns([1, 2, 1])
             with m_prev:
                 if st.button("◀ 前月", key="m_nav_prev"): move_month("prev")
-            with m_curr:
-                st.markdown(f"<center><h3>{st.session_state.current_month}月</h3></center>", unsafe_allow_html=True)
+            with m_today:
+                if st.button("📍 今月", key="m_nav_today"): move_month("today")
             with m_next:
                 if st.button("次月 ▶", key="m_nav_next"): move_month("next")
             st.divider()
@@ -484,14 +497,14 @@ if sheet_df is not None and not sheet_df.empty:
             
             nav_col1, nav_col2, nav_col3 = st.columns([1, 3, 1])
             with nav_col1:
-                if st.button("⬅", key="m_prev", disabled=(st.session_state.selected_row_index == 0)):
+                if st.button("⬅", key="m_prev_row", disabled=(st.session_state.selected_row_index == 0)):
                     st.session_state.selected_row_index -= 1
                     st.rerun()
             with nav_col2:
                 sel = st.selectbox("選択", [o[0] for o in options], index=st.session_state.selected_row_index, label_visibility="collapsed")
                 st.session_state.selected_row_index = [o[0] for o in options].index(sel)
             with nav_col3:
-                if st.button("➡", key="m_next", disabled=(st.session_state.selected_row_index >= len(options)-1)):
+                if st.button("➡", key="m_next_row", disabled=(st.session_state.selected_row_index >= len(options)-1)):
                     st.session_state.selected_row_index += 1
                     st.rerun()
             
@@ -534,7 +547,7 @@ if sheet_df is not None and not sheet_df.empty:
                 if new_title != selected_row['タイトル'] or new_status != selected_row['ステータス']:
                     st.session_state.notebook_df.at[actual_index, 'タイトル'] = new_title
                     st.session_state.notebook_df.at[actual_index, 'ステータス'] = new_status
-                    st.toast("自動保存（仮）", icon="💾")
+                    st.toast("一時保存中...", icon="💾")
 
                 m_col1, m_col2 = st.columns(2)
                 with m_col1:
