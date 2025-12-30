@@ -346,20 +346,37 @@ def colorize_script(script_text):
 # --- 5. メイン処理 ---
 st.title("☕️ アニ無理 制作ノート")
 
-# バージョン表示（確認用）
-st.markdown('<span class="version-badge">🔄 Version 8.2.0 - スケジュール一覧表示復活</span>', unsafe_allow_html=True)
+# バージョン表示
+st.markdown('<span class="version-badge">🔄 Version 8.3.0 - 一括更新＆モバイル月移動</span>', unsafe_allow_html=True)
 
 # セッションステート初期化
 if 'selected_row_index' not in st.session_state:
     st.session_state.selected_row_index = 0
 if 'current_month' not in st.session_state:
-    st.session_state.current_month = 12
+    st.session_state.current_month = datetime.now().month
 if 'current_year' not in st.session_state:
-    st.session_state.current_year = 2024
+    st.session_state.current_year = datetime.now().year
 if 'view_mode' not in st.session_state:
     st.session_state.view_mode = "preview"
 
-# モバイルモード切り替え
+# --- 月移動の共通ロジック ---
+def move_month(direction):
+    if direction == "next":
+        if st.session_state.current_month == 12:
+            st.session_state.current_month = 1
+            st.session_state.current_year += 1
+        else:
+            st.session_state.current_month += 1
+    else:
+        if st.session_state.current_month == 1:
+            st.session_state.current_month = 12
+            st.session_state.current_year -= 1
+        else:
+            st.session_state.current_month -= 1
+    st.session_state.selected_row_index = 0
+    st.rerun()
+
+# --- 6. サイドバー設定 ---
 with st.sidebar:
     st.header("⚙️ 設定")
     
@@ -367,377 +384,177 @@ with st.sidebar:
         st.info("📱 スマホ版で表示中")
         is_mobile = True
     else:
-        device_mode = st.radio(
-            "表示モード",
-            options=["🖥 PC版（フル機能）", "📱 スマホ版（閲覧のみ）"],
-            index=0
-        )
-        
+        device_mode = st.radio("表示モード", options=["🖥 PC版（フル機能）", "📱 スマホ版（閲覧のみ）"], index=0)
         is_mobile = (device_mode == "📱 スマホ版（閲覧のみ）")
     
+    # PC版限定：一括更新機能
     if not is_mobile:
         st.divider()
-        st.subheader("📱 スマホ版URL")
-        mobile_url = "https://tiktok-app-5wwg8zhowhqokpxasht6tg.streamlit.app?mobile=true"
-        st.code(mobile_url, language=None)
-        st.caption("👆 このURLをスマホで開くと、自動的にスマホ版で表示されます")
-    
-    if not is_mobile:
-        st.divider()
-        st.subheader("📅 月の切り替え")
-        col_prev, col_current, col_next = st.columns([1, 2, 1])
-        
-        with col_prev:
-            if st.button("◀ 前月", key="month_prev"):
-                if st.session_state.current_month == 1:
-                    st.session_state.current_month = 12
-                    st.session_state.current_year -= 1
-                else:
-                    st.session_state.current_month -= 1
-                st.session_state.selected_row_index = 0
-                st.rerun()
-        
-        with col_current:
-            st.markdown(f"### {st.session_state.current_year}年 {st.session_state.current_month}月")
-        
-        with col_next:
-            if st.button("次月 ▶", key="month_next"):
-                if st.session_state.current_month == 12:
-                    st.session_state.current_month = 1
-                    st.session_state.current_year += 1
-                else:
-                    st.session_state.current_month += 1
-                st.session_state.selected_row_index = 0
-                st.rerun()
-        
-        st.divider()
-        
-        st.subheader("📊 エピソード番号")
-        st.markdown("""
-        - **12月**: #48〜#61（平日のみ）
-        - **1月**: #62〜#84（平日のみ）
-        - **2月**: #85〜（平日のみ）
-        """)
-        
-        st.divider()
-        
-        st.subheader("📝 台本フォーマット")
-        st.markdown("""
-        **正しい書き方：**
-        - `赤：「Tomomiのセリフ」`
-        - `青：「道ゐのセリフ」`
-        - `黒：「ナレーション」`
-        
-        **プレビュー表示：**
-        - 赤 → **Tomomi：** （赤色）
-        - 青 → **道ゐ：** （青色）
-        - 黒 → そのまま（黒色）
-        """)
-        
-        st.divider()
-        
-        # キャッシュクリアボタン
-        if st.button("🔄 最新データを取得", type="secondary", use_container_width=True):
-            load_data_from_sheet.clear()
-            st.success("✅ キャッシュをクリアしました！")
-            st.rerun()
+        with st.expander("🔄 ステータス一括更新"):
+            st.caption("表示中の月の範囲を指定して更新")
+            # データの読み込みが完了している場合に実行
+            if 'notebook_df' in st.session_state:
+                temp_df = st.session_state.notebook_df
+                temp_df['月'] = pd.to_datetime(temp_df['公開予定日'], format='%m/%d', errors='coerce').dt.month
+                month_eps = temp_df[temp_df['月'] == st.session_state.current_month]
+                
+                if not month_eps.empty:
+                    ep_list = month_eps['No'].tolist()
+                    col_b1, col_b2 = st.columns(2)
+                    with col_b1:
+                        start_ep = st.selectbox("開始", ep_list, key="bulk_start")
+                    with col_b2:
+                        end_ep = st.selectbox("終了", ep_list, index=len(ep_list)-1, key="bulk_end")
+                    
+                    new_stat = st.selectbox("新ステータス", ["未", "台本完", "撮影済", "編集済", "UP済"], key="bulk_stat")
+                    
+                    if st.button("一括更新を実行", type="primary", use_container_width=True):
+                        s_idx = ep_list.index(start_ep)
+                        e_idx = ep_list.index(end_ep)
+                        targets = ep_list[min(s_idx, e_idx) : max(s_idx, e_idx) + 1]
+                        st.session_state.notebook_df.loc[st.session_state.notebook_df['No'].isin(targets), 'ステータス'] = new_stat
+                        if save_data_to_sheet(sheet, st.session_state.notebook_df):
+                            st.success(f"{len(targets)}件を「{new_stat}」に更新！")
+                            time.sleep(1)
+                            st.rerun()
 
-# --- 6. データ初期化・読み込み（キャッシュあり） ---
+    st.divider()
+    st.subheader("📅 月の切り替え")
+    c_prev, c_curr, c_next = st.columns([1, 2, 1])
+    with c_prev:
+        if st.button("◀", key="side_prev"): move_month("prev")
+    with c_curr:
+        st.markdown(f"**{st.session_state.current_year}/{st.session_state.current_month}**")
+    with c_next:
+        if st.button("▶", key="side_next"): move_month("next")
+
+    if st.button("🔄 最新データを取得", type="secondary", use_container_width=True):
+        load_data_from_sheet.clear()
+        st.rerun()
+
+# --- 7. データ読み込み ---
 sheet = connect_to_gsheets()
 sheet_df = load_data_from_sheet(sheet)
 
 if sheet_df is not None and not sheet_df.empty:
-    # 1月・2月のデータを自動生成
     sheet_df = ensure_all_months_data(sheet_df)
     sheet_df = update_episode_numbers(sheet_df, start_episode=48)
     st.session_state.notebook_df = sheet_df
-else:
-    st.error("⚠️ Google Sheetsにデータがありません")
-    st.info("先にGoogle Sheetsにデータを入力してください")
-    st.stop()
-
-if 'notebook_df' in st.session_state:
+    
     df = st.session_state.notebook_df
-
-    # 現在の月のデータをフィルタリング
     df['月'] = pd.to_datetime(df['公開予定日'], format='%m/%d', errors='coerce').dt.month
     current_month_df = df[df['月'] == st.session_state.current_month].copy()
-    
+
     if current_month_df.empty:
-        st.warning(f"{st.session_state.current_year}年{st.session_state.current_month}月のデータがありません")
-        st.info("💡 左サイドバーの「月の切り替え」で他の月を確認してください")
+        st.warning(f"{st.session_state.current_month}月のデータがありません。")
     else:
-        # --- 7. 管理指標ダッシュボード ---
+        # モバイル版用：メイン画面の月移動ボタン
+        if is_mobile:
+            m_prev, m_curr, m_next = st.columns([1, 2, 1])
+            with m_prev:
+                if st.button("◀ 前月", key="m_nav_prev"): move_month("prev")
+            with m_curr:
+                st.markdown(f"<center><h3>{st.session_state.current_month}月</h3></center>", unsafe_allow_html=True)
+            with m_next:
+                if st.button("次月 ▶", key="m_nav_next"): move_month("next")
+            st.divider()
+
+        # --- 8. ダッシュボード ---
         finished_count, deadline_text, sub_text = calculate_stock_deadline(current_month_df)
-        
-        if finished_count is None:
-            finished_count = 0
-            deadline_text = "在庫なし"
-            sub_text = "撮影頑張りましょう！"
-
         st.markdown("### 📊 ストック状況")
-        c1, c2 = st.columns(2)
-        with c1:
-            st.metric("出来上がっている本数！", f"{finished_count} 本", "編集済 + UP済")
-        with c2:
+        d_col1, d_col2 = st.columns(2)
+        with d_col1:
+            st.metric("出来上がっている本数！", f"{finished_count if finished_count else 0} 本", "編集済 + UP済")
+        with d_col2:
             st.metric("何月何日まで投稿可能！", deadline_text, sub_text)
-
         st.divider()
 
-        # --- 8. スケジュール一覧 & 台本機能 ---
+        # --- 9. スケジュール一覧 & 台本機能 ---
         if is_mobile:
-            # ========== モバイル版（ナビゲーション強化版） ==========
-            st.subheader("🗓 スケジュール")
-            
-            st.caption("**ステータス：** ✅UP済 | ✂️編集済 | 🎬撮影済 | 📝台本完 | ⏳未")
-            
+            # ========== モバイル版表示 ==========
             options = []
             for idx, row in current_month_df.iterrows():
-                display_title = row['タイトル'] if row['タイトル'] else "（タイトル未定）"
-                
-                if row['ステータス'] == "UP済":
-                    status_mark = "✅"
-                elif row['ステータス'] == "編集済":
-                    status_mark = "✂️"
-                elif row['ステータス'] == "撮影済":
-                    status_mark = "🎬"
-                elif row['ステータス'] == "台本完":
-                    status_mark = "📝"
-                else:
-                    status_mark = "⏳"
-                
-                label = f"{status_mark} {row['No']} | {row['公開予定日']} | {display_title}"
+                status_mark = {"UP済":"✅","編集済":"✂️","撮影済":"🎬","台本完":"📝"}.get(row['ステータス'], "⏳")
+                label = f"{status_mark} {row['No']} | {row['公開予定日']} | {row['タイトル'] if row['タイトル'] else '（未定）'}"
                 options.append((label, idx))
             
-            # 最大インデックスを保存
-            max_index = len(options) - 1
+            if st.session_state.selected_row_index >= len(options): st.session_state.selected_row_index = 0
             
-            if st.session_state.selected_row_index >= len(options):
-                st.session_state.selected_row_index = 0
-            
-            # ★★★ 上部ナビゲーション（ボタン＋セレクトボックス） ★★★
+            # ナビゲーション
             nav_col1, nav_col2, nav_col3 = st.columns([1, 3, 1])
-            
             with nav_col1:
-                if st.button("⬅", key="mobile_prev_top", disabled=(st.session_state.selected_row_index == 0), use_container_width=True):
+                if st.button("⬅", key="m_prev", disabled=(st.session_state.selected_row_index == 0)):
                     st.session_state.selected_row_index -= 1
                     st.rerun()
-            
             with nav_col2:
-                selected_label = st.selectbox(
-                    "エピソードを選択",
-                    [opt[0] for opt in options],
-                    index=st.session_state.selected_row_index,
-                    key="episode_selector_mobile_top",
-                    label_visibility="collapsed"
-                )
-                
-                if selected_label:
-                    new_index = [opt[0] for opt in options].index(selected_label)
-                    if new_index != st.session_state.selected_row_index:
-                        st.session_state.selected_row_index = new_index
-            
+                sel = st.selectbox("選択", [o[0] for o in options], index=st.session_state.selected_row_index, label_visibility="collapsed")
+                st.session_state.selected_row_index = [o[0] for o in options].index(sel)
             with nav_col3:
-                if st.button("➡", key="mobile_next_top", disabled=(st.session_state.selected_row_index >= max_index), use_container_width=True):
+                if st.button("➡", key="m_next", disabled=(st.session_state.selected_row_index >= len(options)-1)):
                     st.session_state.selected_row_index += 1
                     st.rerun()
             
             actual_index = options[st.session_state.selected_row_index][1]
             selected_row = st.session_state.notebook_df.loc[actual_index]
             
-            st.divider()
-            
-            st.subheader("📊 ステータス変更")
-            current_status = selected_row['ステータス']
-            
-            col_status1, col_status2 = st.columns(2)
-            
-            with col_status1:
-                st.info(f"現在：**{current_status}**")
-            
-            with col_status2:
-                if current_status != "UP済":
-                    if st.button("✅ UP済にする", use_container_width=True, type="primary"):
-                        st.session_state.notebook_df.at[actual_index, 'ステータス'] = "UP済"
-                        with st.spinner("保存中..."):
-                            if save_data_to_sheet(sheet, st.session_state.notebook_df):
-                                st.success("✅ UP済に更新しました！")
-                                st.balloons()
-                                time.sleep(1)
-                                st.rerun()
-                else:
-                    st.success("✅ UP済です！")
-            
-            st.divider()
-            
-            st.subheader(f"🎬 {selected_row['No']} の台本")
-            st.caption(f"📅 {selected_row['公開予定日']} {selected_row['曜日']} | {selected_row['タイトル']}")
-            
-            current_text = selected_row["台本メモ"]
-            colored_html = colorize_script(current_text)
-            
-            st.markdown('<div class="preview-box">' + colored_html + '</div>', unsafe_allow_html=True)
-            
-            # ★★★ 下部ナビゲーション（ボタンのみ） ★★★
-            st.markdown('<div class="nav-divider"></div>', unsafe_allow_html=True)
-            
-            nav_bottom_col1, nav_bottom_col2, nav_bottom_col3 = st.columns([1, 2, 1])
-            
-            with nav_bottom_col1:
-                if st.button("⬅ 前へ", key="mobile_prev_bottom", disabled=(st.session_state.selected_row_index == 0), use_container_width=True):
-                    st.session_state.selected_row_index -= 1
+            st.markdown(f"#### 🎬 {selected_row['No']} の台本")
+            if selected_row['ステータス'] != "UP済":
+                if st.button("✅ UP済にする", type="primary", use_container_width=True):
+                    st.session_state.notebook_df.at[actual_index, 'ステータス'] = "UP済"
+                    save_data_to_sheet(sheet, st.session_state.notebook_df)
+                    st.balloons()
                     st.rerun()
             
-            with nav_bottom_col2:
-                st.markdown(f"<center><strong>{selected_row['No']}</strong></center>", unsafe_allow_html=True)
-            
-            with nav_bottom_col3:
-                if st.button("次へ ➡", key="mobile_next_bottom", disabled=(st.session_state.selected_row_index >= max_index), use_container_width=True):
-                    st.session_state.selected_row_index += 1
-                    st.rerun()
-            
-        else:
-            # ========== PC版（ラジオボタン一覧表示） ==========
-            col1, col2 = st.columns([1.3, 1])
+            st.markdown(f'<div class="preview-box">{colorize_script(selected_row["台本メモ"])}</div>', unsafe_allow_html=True)
 
-            with col1:
+        else:
+            # ========== PC版表示 ==========
+            col_list, col_edit = st.columns([1.3, 1])
+            with col_list:
                 st.subheader("🗓 スケジュール帳")
-                
-                st.caption("👇 ラジオボタンで行を選択すると、右側の台本が切り替わります")
-                
-                st.markdown("""
-                **ステータス表示：**
-                - ✅ UP済
-                - ✂️ 編集済
-                - 🎬 撮影済
-                - 📝 台本完
-                - ⏳ 未
-                """)
-                
-                st.divider()
-                
-                # ★★★ ラジオボタンによる行選択（一覧表示） ★★★
                 options = []
                 for idx, row in current_month_df.iterrows():
-                    display_title = row['タイトル'] if row['タイトル'] else "（タイトル未定）"
-                    
-                    if row['ステータス'] == "UP済":
-                        status_mark = "✅"
-                    elif row['ステータス'] == "編集済":
-                        status_mark = "✂️"
-                    elif row['ステータス'] == "撮影済":
-                        status_mark = "🎬"
-                    elif row['ステータス'] == "台本完":
-                        status_mark = "📝"
-                    else:
-                        status_mark = "⏳"
-                    
-                    label = f"{status_mark} {row['No']} | {row['公開予定日']} {row['曜日']} | {display_title}"
+                    status_mark = {"UP済":"✅","編集済":"✂️","撮影済":"🎬","台本完":"📝"}.get(row['ステータス'], "⏳")
+                    label = f"{status_mark} {row['No']} | {row['公開予定日']} {row['曜日']} | {row['タイトル'] if row['タイトル'] else '（未定）'}"
                     options.append((label, idx))
                 
-                if st.session_state.selected_row_index >= len(options):
-                    st.session_state.selected_row_index = 0
-                
-                selected_label = st.radio(
-                    "台本を選択",
-                    [opt[0] for opt in options],
-                    index=st.session_state.selected_row_index,
-                    key="row_selector",
-                    label_visibility="collapsed"
-                )
-                
-                if selected_label:
-                    new_index = [opt[0] for opt in options].index(selected_label)
-                    if new_index != st.session_state.selected_row_index:
-                        st.session_state.selected_row_index = new_index
+                if st.session_state.selected_row_index >= len(options): st.session_state.selected_row_index = 0
+                sel_label = st.radio("選択", [o[0] for o in options], index=st.session_state.selected_row_index, label_visibility="collapsed")
+                st.session_state.selected_row_index = [o[0] for o in options].index(sel_label)
 
-            with col2:
-                st.subheader("🎬 台本を見る・書く")
-                
-                # 現在選択中の行情報を取得
+            with col_edit:
                 actual_index = options[st.session_state.selected_row_index][1]
                 selected_row = st.session_state.notebook_df.loc[actual_index]
                 
-                st.info(f"📅 {selected_row['公開予定日']} {selected_row['曜日']} | {selected_row['No']}")
+                st.subheader("🎬 台本編集")
+                new_title = st.text_input("タイトル", value=selected_row['タイトル'])
+                new_status = st.selectbox("ステータス", ["未", "台本完", "撮影済", "編集済", "UP済"], index=["未", "台本完", "撮影済", "編集済", "UP済"].index(selected_row['ステータス']))
                 
-                st.markdown("---")
-                
-                # タイトル入力
-                st.write("**📝 タイトル**")
-                new_title = st.text_input(
-                    "タイトルを入力",
-                    value=selected_row['タイトル'],
-                    key=f"title_{actual_index}",
-                    label_visibility="collapsed"
-                )
-                
-                if new_title != selected_row['タイトル']:
+                if new_title != selected_row['タイトル'] or new_status != selected_row['ステータス']:
                     st.session_state.notebook_df.at[actual_index, 'タイトル'] = new_title
-                    st.toast(f"{selected_row['No']} のタイトルを更新しました！", icon="💾")
-                
-                # ステータス選択
-                st.write("**🎬 ステータス**")
-                new_status = st.selectbox(
-                    "ステータスを選択",
-                    options=["未", "台本完", "撮影済", "編集済", "UP済"],
-                    index=["未", "台本完", "撮影済", "編集済", "UP済"].index(selected_row['ステータス']),
-                    key=f"status_{actual_index}",
-                    label_visibility="collapsed"
-                )
-                
-                if new_status != selected_row['ステータス']:
                     st.session_state.notebook_df.at[actual_index, 'ステータス'] = new_status
-                    st.toast(f"{selected_row['No']} のステータスを更新しました！", icon="📊")
-                
-                st.markdown("---")
-                
-                # 編集/プレビュー切り替えボタン
-                mode_col1, mode_col2 = st.columns(2)
-                
-                with mode_col1:
-                    if st.button("✏️ 編集モード", use_container_width=True, 
-                                type="primary" if st.session_state.view_mode == "edit" else "secondary"):
+                    st.toast("自動保存（仮）", icon="💾")
+
+                m_col1, m_col2 = st.columns(2)
+                with m_col1:
+                    if st.button("✏️ 編集", type="primary" if st.session_state.view_mode=="edit" else "secondary", use_container_width=True):
                         st.session_state.view_mode = "edit"
                         st.rerun()
-                
-                with mode_col2:
-                    if st.button("👁 プレビューモード", use_container_width=True,
-                                type="primary" if st.session_state.view_mode == "preview" else "secondary"):
+                with m_col2:
+                    if st.button("👁 プレビュー", type="primary" if st.session_state.view_mode=="preview" else "secondary", use_container_width=True):
                         st.session_state.view_mode = "preview"
                         st.rerun()
-                
-                st.write(f"**【 {selected_row['No']} 】** の台本")
-                
-                current_text = selected_row["台本メモ"]
-                
-                # モードに応じた表示切り替え
-                if st.session_state.view_mode == "edit":
-                    # 編集モード
-                    new_text = st.text_area(
-                        "台本エディタ（編集モード）",
-                        value=current_text,
-                        height=300,
-                        placeholder="ここに台本を記入...\n\n例：\n赤：「こんにちは！」\n青：「よろしく！」\n黒：「【ナレーション】」",
-                        key=f"script_{actual_index}"
-                    )
-                    
-                    if new_text != current_text:
-                        st.session_state.notebook_df.at[actual_index, "台本メモ"] = new_text
-                        st.toast(f"{selected_row['No']} の台本を更新しました！", icon="💾")
-                
-                else:
-                    # プレビューモード
-                    colored_html = colorize_script(current_text)
-                    
-                    st.markdown('<div class="preview-box">' + colored_html + '</div>', unsafe_allow_html=True)
 
-            # --- 9. 保存ボタン（PC版のみ） ---
-            st.divider()
-            if st.button("💾 変更をスプレッドシートに保存する", type="primary", use_container_width=True):
-                with st.spinner("保存中..."):
+                if st.session_state.view_mode == "edit":
+                    new_text = st.text_area("台本エディタ", value=selected_row["台本メモ"], height=400)
+                    if new_text != selected_row["台本メモ"]:
+                        st.session_state.notebook_df.at[actual_index, "台本メモ"] = new_text
+                else:
+                    st.markdown(f'<div class="preview-box">{colorize_script(selected_row["台本メモ"])}</div>', unsafe_allow_html=True)
+                
+                if st.button("💾 全ての変更を保存", type="primary", use_container_width=True):
                     if save_data_to_sheet(sheet, st.session_state.notebook_df):
-                        st.success("✅ 保存しました！Tomomiさんにも共有されました✨")
+                        st.success("保存完了！")
                         st.balloons()
 else:
-    st.error("⚠️ データの初期化に失敗しました")
-    st.info("Secrets設定を確認してください")
+    st.error("データの初期化に失敗しました。Secrets設定を確認してください。")
