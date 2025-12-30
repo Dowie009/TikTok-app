@@ -346,10 +346,10 @@ def colorize_script(script_text):
 # --- 5. メイン処理 ---
 st.title("☕️ アニ無理 制作ノート")
 
-# バージョン表示
+# バージョン表示 (ここが 8.3.1 になればOK！)
 st.markdown('<span class="version-badge">🔄 Version 8.3.1 - 接続順序修正版</span>', unsafe_allow_html=True)
 
-# 1. まずデータに接続する（ここを先に持ってきたよ！）
+# 【重要】まず最初にデータに接続する（これでエラーを回避！）
 sheet = connect_to_gsheets()
 sheet_df = load_data_from_sheet(sheet)
 
@@ -396,9 +396,7 @@ with st.sidebar:
         st.divider()
         with st.expander("🔄 ステータス一括更新"):
             st.caption("表示中の月の範囲を指定して更新")
-            # データの読み込みが完了している場合に実行
             if sheet_df is not None:
-                # 月のデータを作る
                 temp_df = sheet_df.copy()
                 temp_df = ensure_all_months_data(temp_df)
                 temp_df['月'] = pd.to_datetime(temp_df['公開予定日'], format='%m/%d', errors='coerce').dt.month
@@ -419,7 +417,6 @@ with st.sidebar:
                         e_idx = ep_list.index(end_ep)
                         targets = ep_list[min(s_idx, e_idx) : max(s_idx, e_idx) + 1]
                         
-                        # 全体データ(notebook_df)を更新
                         if 'notebook_df' in st.session_state:
                             st.session_state.notebook_df.loc[st.session_state.notebook_df['No'].isin(targets), 'ステータス'] = new_stat
                             if save_data_to_sheet(sheet, st.session_state.notebook_df):
@@ -454,7 +451,6 @@ if sheet_df is not None and not sheet_df.empty:
     if current_month_df.empty:
         st.warning(f"{st.session_state.current_month}月のデータがありません。")
     else:
-        # モバイル版用：メイン画面の月移動ボタン
         if is_mobile:
             m_prev, m_curr, m_next = st.columns([1, 2, 1])
             with m_prev:
@@ -486,7 +482,6 @@ if sheet_df is not None and not sheet_df.empty:
             
             if st.session_state.selected_row_index >= len(options): st.session_state.selected_row_index = 0
             
-            # ナビゲーション
             nav_col1, nav_col2, nav_col3 = st.columns([1, 3, 1])
             with nav_col1:
                 if st.button("⬅", key="m_prev", disabled=(st.session_state.selected_row_index == 0)):
@@ -563,4 +558,4 @@ if sheet_df is not None and not sheet_df.empty:
                         st.success("保存完了！")
                         st.balloons()
 else:
-    st.error("データの初期化に失敗しました。Secrets設定を確認してください。")
+    st.error("データの初期化に失敗しました。")
