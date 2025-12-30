@@ -347,7 +347,11 @@ def colorize_script(script_text):
 st.title("☕️ アニ無理 制作ノート")
 
 # バージョン表示
-st.markdown('<span class="version-badge">🔄 Version 8.3.0 - 一括更新＆モバイル月移動</span>', unsafe_allow_html=True)
+st.markdown('<span class="version-badge">🔄 Version 8.3.1 - 接続順序修正版</span>', unsafe_allow_html=True)
+
+# 1. まずデータに接続する（ここを先に持ってきたよ！）
+sheet = connect_to_gsheets()
+sheet_df = load_data_from_sheet(sheet)
 
 # セッションステート初期化
 if 'selected_row_index' not in st.session_state:
@@ -393,8 +397,10 @@ with st.sidebar:
         with st.expander("🔄 ステータス一括更新"):
             st.caption("表示中の月の範囲を指定して更新")
             # データの読み込みが完了している場合に実行
-            if 'notebook_df' in st.session_state:
-                temp_df = st.session_state.notebook_df
+            if sheet_df is not None:
+                # 月のデータを作る
+                temp_df = sheet_df.copy()
+                temp_df = ensure_all_months_data(temp_df)
                 temp_df['月'] = pd.to_datetime(temp_df['公開予定日'], format='%m/%d', errors='coerce').dt.month
                 month_eps = temp_df[temp_df['月'] == st.session_state.current_month]
                 
@@ -412,11 +418,14 @@ with st.sidebar:
                         s_idx = ep_list.index(start_ep)
                         e_idx = ep_list.index(end_ep)
                         targets = ep_list[min(s_idx, e_idx) : max(s_idx, e_idx) + 1]
-                        st.session_state.notebook_df.loc[st.session_state.notebook_df['No'].isin(targets), 'ステータス'] = new_stat
-                        if save_data_to_sheet(sheet, st.session_state.notebook_df):
-                            st.success(f"{len(targets)}件を「{new_stat}」に更新！")
-                            time.sleep(1)
-                            st.rerun()
+                        
+                        # 全体データ(notebook_df)を更新
+                        if 'notebook_df' in st.session_state:
+                            st.session_state.notebook_df.loc[st.session_state.notebook_df['No'].isin(targets), 'ステータス'] = new_stat
+                            if save_data_to_sheet(sheet, st.session_state.notebook_df):
+                                st.success(f"{len(targets)}件を「{new_stat}」に更新！")
+                                time.sleep(1)
+                                st.rerun()
 
     st.divider()
     st.subheader("📅 月の切り替え")
@@ -432,10 +441,7 @@ with st.sidebar:
         load_data_from_sheet.clear()
         st.rerun()
 
-# --- 7. データ読み込み ---
-sheet = connect_to_gsheets()
-sheet_df = load_data_from_sheet(sheet)
-
+# --- 7. データ処理 ---
 if sheet_df is not None and not sheet_df.empty:
     sheet_df = ensure_all_months_data(sheet_df)
     sheet_df = update_episode_numbers(sheet_df, start_episode=48)
