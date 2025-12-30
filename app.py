@@ -8,8 +8,8 @@ import time
 import re
 
 # ==============================================
-# 🔥 アニ無理 制作ノート 完全版
-# Version: 8.7.0 - デザイン維持・機能統合版
+# 🔥 アニ無理 制作ノート 
+# Version: 8.8.0 - エラー修正・8.2.0レイアウト完全復帰
 # ==============================================
 
 # --- 1. アプリの設定 ---
@@ -25,31 +25,31 @@ query_params = st.query_params
 is_mobile_from_url = query_params.get("mobile", "false").lower() == "true"
 
 # --- 2. デザイン (8.2.0の完璧なデザインを継承) ---
-st.markdown(f"""
+st.markdown("""
     <style>
-    .stApp {{ background-color: #EFEBD6; color: #4A3B2A; }}
-    h1, h2, h3, h4, h5, h6, p, label, span, div, li {{
+    .stApp { background-color: #EFEBD6; color: #4A3B2A; }
+    h1, h2, h3, h4, h5, h6, p, label, span, div, li {
         color: #4A3B2A !important;
         font-family: "Hiragino Mincho ProN", "Yu Mincho", serif;
-    }}
-    [data-testid="stSidebar"] {{ background-color: #E6DCCF; border-right: 1px solid #C0B2A0; }}
-    .stTextInput input, .stDateInput input, .stSelectbox div[data-baseweb="select"], .stTextArea textarea {{
+    }
+    [data-testid="stSidebar"] { background-color: #E6DCCF; border-right: 1px solid #C0B2A0; }
+    .stTextInput input, .stDateInput input, .stSelectbox div[data-baseweb="select"], .stTextArea textarea {
         background-color: #FFFAF0 !important; color: #3E2723 !important; border: 1px solid #A1887F;
-    }}
-    [data-testid="stDataFrame"] {{ background-color: #FFFAF0 !important; border: 1px solid #A1887F; }}
-    .stButton>button {{
+    }
+    [data-testid="stDataFrame"] { background-color: #FFFAF0 !important; border: 1px solid #A1887F; }
+    .stButton>button {
         background-color: #D7CCC8; color: #3E2723 !important; border: 1px solid #8D6E63;
         border-radius: 4px; font-size: 1.1em; padding: 12px 20px;
-    }}
-    .red-text {{ color: #E53935 !important; font-weight: bold; font-size: 1.1em; line-height: 1.8; }}
-    .blue-text {{ color: #1E88E5 !important; font-weight: bold; font-size: 1.1em; line-height: 1.8; }}
-    .black-text {{ color: #212121 !important; font-size: 1.0em; line-height: 1.8; }}
-    .preview-box {{ background-color: #FFFAF0; padding: 20px; border-radius: 8px; border: 2px solid #A1887F; min-height: 300px; }}
-    .version-badge {{ background-color: #4CAF50; color: white; padding: 5px 10px; border-radius: 5px; font-size: 0.9em; font-weight: bold; }}
+    }
+    .red-text { color: #E53935 !important; font-weight: bold; font-size: 1.1em; line-height: 1.8; }
+    .blue-text { color: #1E88E5 !important; font-weight: bold; font-size: 1.1em; line-height: 1.8; }
+    .black-text { color: #212121 !important; font-size: 1.0em; line-height: 1.8; }
+    .preview-box { background-color: #FFFAF0; padding: 20px; border-radius: 8px; border: 2px solid #A1887F; min-height: 300px; }
+    .version-badge { background-color: #4CAF50; color: white; padding: 5px 10px; border-radius: 5px; font-size: 0.9em; font-weight: bold; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. スプレッドシート接続機能 (8.2.0準拠) ---
+# --- 3. スプレッドシート接続機能 ---
 @st.cache_resource(ttl=3600)
 def connect_to_gsheets():
     try:
@@ -67,10 +67,12 @@ def connect_to_gsheets():
 def load_data_from_sheet(_sheet):
     if _sheet is None: return None
     try:
+        time.sleep(0.3)
         data = _sheet.get_all_records()
         if not data: return None
         df = pd.DataFrame(data)
-        if "台本" in df.columns: df = df.rename(columns={"台本": "台台本メモ"})
+        # 打ち間違いを修正
+        if "台本" in df.columns: df = df.rename(columns={"台本": "台本メモ"})
         return df
     except: return None
 
@@ -80,7 +82,7 @@ def save_data_to_sheet(sheet, df):
         sheet.clear()
         save_df = df.copy()
         if "台本メモ" in save_df.columns: save_df = save_df.rename(columns={"台本メモ": "台本"})
-        # 内部用列を削除して保存
+        # 補助列を除去
         final_cols = [c for c in save_df.columns if c not in ["月_internal"]]
         sheet.update([final_cols] + save_df[final_cols].values.tolist())
         load_data_from_sheet.clear(); return True
@@ -107,7 +109,6 @@ def ensure_all_months_data(df):
     df['月_internal'] = pd.to_datetime(df['公開予定日'], format='%m/%d', errors='coerce').dt.month
     existing = df['月_internal'].unique().tolist()
     all_data = [df]
-    # 今月〜再来月までを自動生成
     today = datetime.now()
     for i in range(3):
         target = today + timedelta(days=31*i)
@@ -122,34 +123,38 @@ def calculate_stock_deadline(df):
     return len(fin), f"{fin['公開予定日'].iloc[-1]} まで", "投稿可能！✨"
 
 def colorize_script(text):
-    if not text: return "<p>台本を入力してください</p>"
+    # floatエラー(NaN)対策：文字じゃない場合は空文字にする
+    if not isinstance(text, str) or not text: 
+        return "<p class='black-text'>台本を入力してください</p>"
     lines = text.split('\n')
     res = []
     for l in lines:
-        if l.startswith('赤：'): res.append(f'<p class="red-text">Tomomi：{l[2:]}</p>')
+        l = l.strip()
+        if not l: res.append("<br>")
+        elif l.startswith('赤：'): res.append(f'<p class="red-text">Tomomi：{l[2:]}</p>')
         elif l.startswith('青：'): res.append(f'<p class="blue-text">道ゐ：{l[2:]}</p>')
         else: res.append(f'<p class="black-text">{l}</p>')
     return ''.join(res)
 
 # --- 5. メイン処理 ---
 st.title("☕️ アニ無理 制作ノート")
-st.markdown('<span class="version-badge">🔄 Version 8.7.0 - 完全統合版</span>', unsafe_allow_html=True)
+st.markdown('<span class="version-badge">🔄 Version 8.8.0 - エラー修正・完全復帰版</span>', unsafe_allow_html=True)
 
 # 接続
 sheet = connect_to_gsheets()
 sheet_df = load_data_from_sheet(sheet)
 
-# セッション状態（自動で「今の月」を初期値にする）
+# セッション状態
 if 'current_month' not in st.session_state: st.session_state.current_month = datetime.now().month
 if 'current_year' not in st.session_state: st.session_state.current_year = datetime.now().year
 if 'selected_row_index' not in st.session_state: st.session_state.selected_row_index = 0
 if 'view_mode' not in st.session_state: st.session_state.view_mode = "preview"
 
-def move_month(dir):
-    if dir == "next":
+def move_month(direction):
+    if direction == "next":
         if st.session_state.current_month == 12: st.session_state.current_month = 1; st.session_state.current_year += 1
         else: st.session_state.current_month += 1
-    elif dir == "prev":
+    elif direction == "prev":
         if st.session_state.current_month == 1: st.session_state.current_month = 12; st.session_state.current_year -= 1
         else: st.session_state.current_month -= 1
     st.session_state.selected_row_index = 0; st.rerun()
@@ -164,29 +169,32 @@ with st.sidebar:
         st.divider()
         with st.expander("🔄 ステータス一括更新"):
             full_df = ensure_all_months_data(sheet_df)
-            m_eps = full_df[pd.to_datetime(full_df['公開予定日'], format='%m/%d', errors='coerce').dt.month == st.session_state.current_month]
+            full_df['月_internal'] = pd.to_datetime(full_df['公開予定日'], format='%m/%d', errors='coerce').dt.month
+            m_eps = full_df[full_df['月_internal'] == st.session_state.current_month]
             if not m_eps.empty:
                 eps = m_eps['No'].tolist()
                 s_ep = st.selectbox("開始", eps); e_ep = st.selectbox("終了", eps, index=len(eps)-1)
-                new_stat = st.selectbox("新ステータス", ["未", "台本完", "撮影済", "編集済", "UP済"])
+                stat = st.selectbox("新ステータス", ["未", "台本完", "撮影済", "編集済", "UP済"])
                 if st.button("一括更新を実行", type="primary"):
                     targets = eps[eps.index(s_ep):eps.index(e_ep)+1]
-                    st.session_state.notebook_df.loc[st.session_state.notebook_df['No'].isin(targets), 'ステータス'] = new_stat
-                    if save_data_to_sheet(sheet, st.session_state.notebook_df): st.success("更新完了！"); time.sleep(1); st.rerun()
+                    st.session_state.notebook_df.loc[st.session_state.notebook_df['No'].isin(targets), 'ステータス'] = stat
+                    if save_data_to_sheet(sheet, st.session_state.notebook_df):
+                        st.success("更新しました！"); time.sleep(1); st.rerun()
 
     st.divider(); st.subheader("📅 月の切り替え")
     c1, c2, c3 = st.columns([1, 2, 1])
     with c1: 
         if st.button("◀", key="s_prev"): move_month("prev")
-    with c2: st.write(f"**{st.session_state.current_year}/{st.session_state.current_month}**")
+    with c2: st.write(f"<center><b>{st.session_state.current_year}/{st.session_state.current_month}</b></center>", unsafe_allow_html=True)
     with c3: 
         if st.button("▶", key="s_next"): move_month("next")
 
-# 描画処理
+# メイン描画
 if sheet_df is not None:
     df = ensure_all_months_data(sheet_df)
     st.session_state.notebook_df = df
-    curr_df = df[pd.to_datetime(df['公開予定日'], format='%m/%d', errors='coerce').dt.month == st.session_state.current_month].copy()
+    df['月_internal'] = pd.to_datetime(df['公開予定日'], format='%m/%d', errors='coerce').dt.month
+    curr_df = df[df['月_internal'] == st.session_state.current_month].copy()
 
     # ダッシュボード
     count, deadline, sub = calculate_stock_deadline(curr_df)
@@ -195,14 +203,14 @@ if sheet_df is not None:
     with d1: st.metric("出来上がっている本数！", f"{count} 本", "編集済 + UP済")
     with d2: st.metric("何月何日まで投稿可能！", deadline, sub)
     
-    # スマホ版専用：月移動ボタン（ストック状況の下に配置）
+    # スマホ版専用：月移動ボタン
     if is_mobile:
         st.divider()
-        m_col1, m_col2, m_col3 = st.columns([1, 2, 1])
-        with m_col1: 
+        m1, m2, m3 = st.columns([1, 2, 1])
+        with m1: 
             if st.button("◀ 前月", key="m_nav_p"): move_month("prev")
-        with m_col2: st.markdown(f"<center><b>{st.session_state.current_month}月を表示中</b></center>", unsafe_allow_html=True)
-        with m_col3: 
+        with m2: st.write(f"<center><b>{st.session_state.current_month}月を表示中</b></center>", unsafe_allow_html=True)
+        with m3: 
             if st.button("次月 ▶", key="m_nav_n"): move_month("next")
 
     st.divider()
@@ -216,7 +224,7 @@ if sheet_df is not None:
         if st.session_state.selected_row_index >= len(opts): st.session_state.selected_row_index = 0
         
         if is_mobile:
-            # モバイル版：ナビゲーション＋台本
+            # スマホ版：ナビゲーション＋台本プレビュー
             n1, n2, n3 = st.columns([1, 3, 1])
             with n1: 
                 if st.button("⬅", key="row_p", disabled=st.session_state.selected_row_index==0):
@@ -236,22 +244,30 @@ if sheet_df is not None:
                     save_data_to_sheet(sheet, df); st.balloons(); st.rerun()
             st.markdown(f'<div class="preview-box">{colorize_script(row["台本メモ"])}</div>', unsafe_allow_html=True)
         else:
-            # PC版：ラジオボタン＋編集
-            c_list, c_edit = st.columns([1.3, 1])
-            with c_list:
+            # PC版：8.2.0形式のラジオボタン＋詳細編集
+            col1, col2 = st.columns([1.3, 1])
+            with col1:
                 st.subheader("🗓 スケジュール帳")
-                sel_label = st.radio("選択", [o[0] for o in opts], index=st.session_state.selected_row_index, label_visibility="collapsed")
+                sel_label = st.radio("台本を選択", [o[0] for o in opts], index=st.session_state.selected_row_index, label_visibility="collapsed")
                 st.session_state.selected_row_index = [o[0] for o in opts].index(sel_label)
-            with c_edit:
+            with col2:
                 row = df.loc[opts[st.session_state.selected_row_index][1]]
-                st.subheader("🎬 台本編集")
+                st.subheader("🎬 台本を見る・書く")
+                st.info(f"📅 {row['公開予定日']} {row['曜日']} | {row['No']}")
                 t = st.text_input("タイトル", value=row['タイトル'])
-                s = st.selectbox("状態", ["未","台本完","撮影済","編集済","UP済"], index=["未","台本完","撮影済","編集済","UP済"].index(row['ステータス']))
-                if st.button("✏️ 編集" if st.session_state.view_mode=="preview" else "👁 プレビュー"):
-                    st.session_state.view_mode = "edit" if st.session_state.view_mode=="preview" else "preview"; st.rerun()
+                s = st.selectbox("ステータス", ["未","台本完","撮影済","編集済","UP済"], index=["未","台本完","撮影済","編集済","UP済"].index(row['ステータス']))
+                
+                m1, m2 = st.columns(2)
+                with m1:
+                    if st.button("✏️ 編集モード", type="primary" if st.session_state.view_mode=="edit" else "secondary", use_container_width=True):
+                        st.session_state.view_mode = "edit"; st.rerun()
+                with m2:
+                    if st.button("👁 プレビュー", type="primary" if st.session_state.view_mode=="preview" else "secondary", use_container_width=True):
+                        st.session_state.view_mode = "preview"; st.rerun()
+                
                 if st.session_state.view_mode == "edit":
-                    txt = st.text_area("内容", value=row['台本メモ'], height=300)
-                    if st.button("💾 全ての変更を保存", type="primary"):
+                    txt = st.text_area("台本エディタ", value=row['台本メモ'] if isinstance(row['台本メモ'], str) else "", height=300)
+                    if st.button("💾 全ての変更を保存", type="primary", use_container_width=True):
                         df.at[opts[st.session_state.selected_row_index][1], 'タイトル'] = t
                         df.at[opts[st.session_state.selected_row_index][1], 'ステータス'] = s
                         df.at[opts[st.session_state.selected_row_index][1], '台本メモ'] = txt
