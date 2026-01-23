@@ -1,7 +1,8 @@
-# Force rebuild - 2025-12-13 16:00
+# Force rebuild - 2026-01-23 19:30
 google-auth
 google-auth-oauthlib
 google-auth-httplib2
 gspread
 pandas
 streamlit
+altair
