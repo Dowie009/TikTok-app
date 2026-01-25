@@ -63,6 +63,14 @@ st.markdown("""
         border-color: #E53935 !important;
         box-shadow: none !important;
     }
+    /* 選択中の行を目立たせる（背景色+左に赤いバー） */
+    [data-baseweb="radio"][aria-checked="true"] {
+        background-color: #FFF8E1 !important;
+        border-left: 4px solid #E53935 !important;
+        border-radius: 4px !important;
+        padding-left: 8px !important;
+        margin-left: -12px !important;
+    }
     .stButton>button { background-color: #D7CCC8; color: #3E2723 !important; border-radius: 4px; font-weight: bold; width: 100%; }
     
     /* 台本の文字スタイル */
