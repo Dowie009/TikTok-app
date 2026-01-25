@@ -237,8 +237,13 @@ if not curr_df.empty:
         c_l, c_r = st.columns([1.3, 1])
         with c_l:
             st.subheader("🗓 スケジュール帳")
-            sel_l = st.radio("選択", [o[0] for o in opts], index=st.session_state.sel_idx, label_visibility="collapsed")
-            st.session_state.sel_idx = [o[0] for o in opts].index(sel_l)
+            opt_labels = [o[0] for o in opts]
+            # keyを使ってStreamlitに状態管理を任せる
+            sel_l = st.radio("選択", opt_labels, index=st.session_state.sel_idx, key="schedule_radio", label_visibility="collapsed")
+            new_idx = opt_labels.index(sel_l)
+            if new_idx != st.session_state.sel_idx:
+                st.session_state.sel_idx = new_idx
+                st.rerun()
         with c_r:
             row_idx = opts[st.session_state.sel_idx][1]
             row = df.loc[row_idx]
