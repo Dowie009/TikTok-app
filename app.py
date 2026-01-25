@@ -39,6 +39,8 @@ st.markdown("""
     /* 選択済みの表示部分 */
     [data-baseweb="select"] > div { background-color: #FFFAF0 !important; }
     [data-baseweb="select"] > div > div { color: #3E2723 !important; }
+    /* ラジオボタンのスタイル（白い丸に） */
+    .stRadio div[role="radiogroup"] label > div:first-child { background-color: #FFFAF0 !important; border-color: #A1887F !important; }
     .stButton>button { background-color: #D7CCC8; color: #3E2723 !important; border-radius: 4px; font-weight: bold; width: 100%; }
     
     /* 台本の文字スタイル */
