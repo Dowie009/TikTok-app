@@ -39,47 +39,40 @@ st.markdown("""
     /* 選択済みの表示部分 */
     [data-baseweb="select"] > div { background-color: #FFFAF0 !important; }
     [data-baseweb="select"] > div > div { color: #3E2723 !important; }
-    /* ラジオボタンのスタイル - 未選択は白+縁+中央に点、選択中は赤で大きく */
-    [data-baseweb="radio"] > div:first-child {
+    /* ラジオボタンのスタイル - Streamlit用の正しいセレクタ */
+    /* 未選択のラジオボタン */
+    div[data-testid="stRadio"] label span[data-testid="stMarkdownContainer"] + div {
         background-color: #FFFAF0 !important;
         border: 2px solid #A1887F !important;
-        box-shadow: inset 0 0 0 3px #FFFAF0, inset 0 0 0 6px #C0B2A0 !important;
-        width: 20px !important;
-        height: 20px !important;
     }
-    [data-baseweb="radio"][aria-checked="true"] > div:first-child {
+    div[data-testid="stRadio"] label span[data-testid="stMarkdownContainer"] + div > div {
+        background-color: #C0B2A0 !important;
+        width: 6px !important;
+        height: 6px !important;
+    }
+    /* 選択されたラジオボタン - 赤く大きく */
+    div[data-testid="stRadio"] label[data-checked="true"] span[data-testid="stMarkdownContainer"] + div {
         background-color: #E53935 !important;
-        border-color: #B71C1C !important;
-        box-shadow: 0 0 0 3px #FFCDD2 !important;
-        width: 24px !important;
-        height: 24px !important;
-        transform: scale(1.2) !important;
+        border: 3px solid #B71C1C !important;
+        transform: scale(1.3) !important;
+        box-shadow: 0 0 8px #FFCDD2 !important;
     }
-    [data-baseweb="radio"] div { background-color: transparent !important; }
-    [data-baseweb="radio"][aria-checked="true"] div:first-child div { background-color: #FFFFFF !important; }
-    /* サイドバーのラジオボタンも同様に */
-    [data-testid="stSidebar"] [data-baseweb="radio"] > div:first-child {
-        background-color: #FFFAF0 !important;
-        border: 2px solid #A1887F !important;
-        box-shadow: inset 0 0 0 3px #FFFAF0, inset 0 0 0 6px #C0B2A0 !important;
+    div[data-testid="stRadio"] label[data-checked="true"] span[data-testid="stMarkdownContainer"] + div > div {
+        background-color: #FFFFFF !important;
+        width: 8px !important;
+        height: 8px !important;
     }
-    [data-testid="stSidebar"] [data-baseweb="radio"][aria-checked="true"] > div:first-child {
-        background-color: #E53935 !important;
-        border-color: #E53935 !important;
-        box-shadow: none !important;
-    }
-    /* 選択中の行を目立たせる（背景色+左に赤いバー+太字） */
-    label:has([data-baseweb="radio"][aria-checked="true"]) {
-        background-color: #FFF8E1 !important;
-        border-left: 4px solid #E53935 !important;
-        border-radius: 4px !important;
-        padding: 4px 8px !important;
-        margin-left: -4px !important;
-        display: block !important;
-    }
-    label:has([data-baseweb="radio"][aria-checked="true"]) p {
+    /* 選択中の行のテキストを太字+赤に */
+    div[data-testid="stRadio"] label[data-checked="true"] p {
         font-weight: bold !important;
         color: #C62828 !important;
+    }
+    /* 選択中の行の背景を目立たせる */
+    div[data-testid="stRadio"] label[data-checked="true"] {
+        background-color: #FFF8E1 !important;
+        border-left: 4px solid #E53935 !important;
+        padding-left: 8px !important;
+        border-radius: 4px !important;
     }
     .stButton>button { background-color: #D7CCC8; color: #3E2723 !important; border-radius: 4px; font-weight: bold; width: 100%; text-align: left !important; justify-content: flex-start !important; }
     
@@ -217,9 +210,11 @@ if not curr_df.empty:
     st.divider()
 
     opts = []
-    for i, r in curr_df.iterrows():
+    for idx, (i, r) in enumerate(curr_df.iterrows()):
         m = {"UP済":"✅","編集済":"✂️","撮影済":"🎬","台本完":"📝"}.get(r['ステータス'], "⏳")
-        opts.append((f"{m} {r['No']} | {r['公開予定日']} | {r['タイトル'] or '未定'}", i))
+        # 選択中の行には🔴、それ以外は⚪を付ける
+        sel_mark = "🔴" if idx == st.session_state.sel_idx else "⚪"
+        opts.append((f"{sel_mark} {m} {r['No']} | {r['公開予定日']} | {r['タイトル'] or '未定'}", i))
     
     if st.session_state.sel_idx >= len(opts): st.session_state.sel_idx = 0
 
