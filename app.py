@@ -76,7 +76,7 @@ st.markdown("""
         font-weight: bold !important;
         color: #C62828 !important;
     }
-    .stButton>button { background-color: #D7CCC8; color: #3E2723 !important; border-radius: 4px; font-weight: bold; width: 100%; }
+    .stButton>button { background-color: #D7CCC8; color: #3E2723 !important; border-radius: 4px; font-weight: bold; width: 100%; text-align: left !important; justify-content: flex-start !important; }
     
     /* 台本の文字スタイル */
     .red-text { color: #E53935 !important; font-size: 1.15em; line-height: 1.8; margin-bottom: 8px; }
