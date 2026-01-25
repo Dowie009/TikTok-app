@@ -22,9 +22,13 @@ st.markdown("""
     .stApp { background-color: #EFEBD6; color: #4A3B2A; }
     h1, h2, h3, h4, h5, h6, p, label, span, div, li { color: #4A3B2A !important; font-family: "Yu Mincho", serif; }
     [data-testid="stSidebar"] { background-color: #E6DCCF; border-right: 1px solid #C0B2A0; }
-    .stTextInput input, .stDateInput input, .stSelectbox div[data-baseweb="select"], .stTextArea textarea {
+    .stTextInput input, .stDateInput input, .stTextArea textarea {
         background-color: #FFFAF0 !important; color: #3E2723 !important; border: 1px solid #A1887F;
     }
+    /* ドロップダウン全体のスタイル */
+    .stSelectbox div[data-baseweb="select"] { background-color: #FFFAF0 !important; border: 1px solid #A1887F; }
+    .stSelectbox div[data-baseweb="select"] span { color: #3E2723 !important; }
+    .stSelectbox svg { fill: #3E2723 !important; }
     /* ドロップダウンメニューのオプション */
     [data-baseweb="menu"] { background-color: #FFFAF0 !important; }
     [data-baseweb="menu"] li { background-color: #FFFAF0 !important; color: #3E2723 !important; }
@@ -32,6 +36,9 @@ st.markdown("""
     [role="listbox"] { background-color: #FFFAF0 !important; }
     [role="option"] { background-color: #FFFAF0 !important; color: #3E2723 !important; }
     [role="option"]:hover { background-color: #E6DCCF !important; }
+    /* 選択済みの表示部分 */
+    [data-baseweb="select"] > div { background-color: #FFFAF0 !important; }
+    [data-baseweb="select"] > div > div { color: #3E2723 !important; }
     .stButton>button { background-color: #D7CCC8; color: #3E2723 !important; border-radius: 4px; font-weight: bold; width: 100%; }
     
     /* 台本の文字スタイル */
