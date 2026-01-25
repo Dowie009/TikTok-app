@@ -39,19 +39,24 @@ st.markdown("""
     /* 選択済みの表示部分 */
     [data-baseweb="select"] > div { background-color: #FFFAF0 !important; }
     [data-baseweb="select"] > div > div { color: #3E2723 !important; }
-    /* ラジオボタンのスタイル - 未選択は白+縁+中央に点、選択中は赤 */
+    /* ラジオボタンのスタイル - 未選択は白+縁+中央に点、選択中は赤で大きく */
     [data-baseweb="radio"] > div:first-child {
         background-color: #FFFAF0 !important;
         border: 2px solid #A1887F !important;
         box-shadow: inset 0 0 0 3px #FFFAF0, inset 0 0 0 6px #C0B2A0 !important;
+        width: 20px !important;
+        height: 20px !important;
     }
     [data-baseweb="radio"][aria-checked="true"] > div:first-child {
         background-color: #E53935 !important;
-        border-color: #E53935 !important;
-        box-shadow: none !important;
+        border-color: #B71C1C !important;
+        box-shadow: 0 0 0 3px #FFCDD2 !important;
+        width: 24px !important;
+        height: 24px !important;
+        transform: scale(1.2) !important;
     }
     [data-baseweb="radio"] div { background-color: transparent !important; }
-    [data-baseweb="radio"][aria-checked="true"] div:first-child div { background-color: #E53935 !important; }
+    [data-baseweb="radio"][aria-checked="true"] div:first-child div { background-color: #FFFFFF !important; }
     /* サイドバーのラジオボタンも同様に */
     [data-testid="stSidebar"] [data-baseweb="radio"] > div:first-child {
         background-color: #FFFAF0 !important;
@@ -239,17 +244,11 @@ if not curr_df.empty:
         c_l, c_r = st.columns([1.3, 1])
         with c_l:
             st.subheader("🗓 スケジュール帳")
-            # 各行をボタンで表示（選択中は赤背景）
-            for idx, (label, row_i) in enumerate(opts):
-                is_selected = idx == st.session_state.sel_idx
-                if is_selected:
-                    # 選択中: 赤い背景
-                    st.markdown(f'<div style="background-color:#FFCDD2; border-left:4px solid #E53935; padding:8px 12px; margin:4px 0; border-radius:4px; cursor:pointer;"><strong style="color:#C62828;">● {label}</strong></div>', unsafe_allow_html=True)
-                else:
-                    # 未選択: クリック可能なボタン
-                    if st.button(f"○ {label}", key=f"opt_{idx}", use_container_width=True):
-                        st.session_state.sel_idx = idx
-                        st.rerun()
+            # 現在選択中を表示
+            current_opt = opts[st.session_state.sel_idx][0]
+            st.markdown(f'<div style="background-color:#FFF8E1; border-left:4px solid #E53935; padding:8px 12px; margin-bottom:10px; border-radius:4px;"><strong style="color:#C62828;">📍 選択中：</strong> {current_opt}</div>', unsafe_allow_html=True)
+            sel_l = st.radio("選択", [o[0] for o in opts], index=st.session_state.sel_idx, label_visibility="collapsed")
+            st.session_state.sel_idx = [o[0] for o in opts].index(sel_l)
         with c_r:
             row_idx = opts[st.session_state.sel_idx][1]
             row = df.loc[row_idx]
