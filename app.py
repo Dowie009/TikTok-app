@@ -239,11 +239,17 @@ if not curr_df.empty:
         c_l, c_r = st.columns([1.3, 1])
         with c_l:
             st.subheader("🗓 スケジュール帳")
-            # 現在選択中を表示
-            current_opt = opts[st.session_state.sel_idx][0]
-            st.markdown(f'<div style="background-color:#FFF8E1; border-left:4px solid #E53935; padding:8px 12px; margin-bottom:10px; border-radius:4px;"><strong style="color:#C62828;">📍 選択中：</strong> {current_opt}</div>', unsafe_allow_html=True)
-            sel_l = st.radio("選択", [o[0] for o in opts], index=st.session_state.sel_idx, label_visibility="collapsed")
-            st.session_state.sel_idx = [o[0] for o in opts].index(sel_l)
+            # 各行をボタンで表示（選択中は赤背景）
+            for idx, (label, row_i) in enumerate(opts):
+                is_selected = idx == st.session_state.sel_idx
+                if is_selected:
+                    # 選択中: 赤い背景
+                    st.markdown(f'<div style="background-color:#FFCDD2; border-left:4px solid #E53935; padding:8px 12px; margin:4px 0; border-radius:4px; cursor:pointer;"><strong style="color:#C62828;">● {label}</strong></div>', unsafe_allow_html=True)
+                else:
+                    # 未選択: クリック可能なボタン
+                    if st.button(f"○ {label}", key=f"opt_{idx}", use_container_width=True):
+                        st.session_state.sel_idx = idx
+                        st.rerun()
         with c_r:
             row_idx = opts[st.session_state.sel_idx][1]
             row = df.loc[row_idx]
