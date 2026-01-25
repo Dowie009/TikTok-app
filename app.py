@@ -25,6 +25,13 @@ st.markdown("""
     .stTextInput input, .stDateInput input, .stSelectbox div[data-baseweb="select"], .stTextArea textarea {
         background-color: #FFFAF0 !important; color: #3E2723 !important; border: 1px solid #A1887F;
     }
+    /* ドロップダウンメニューのオプション */
+    [data-baseweb="menu"] { background-color: #FFFAF0 !important; }
+    [data-baseweb="menu"] li { background-color: #FFFAF0 !important; color: #3E2723 !important; }
+    [data-baseweb="menu"] li:hover { background-color: #E6DCCF !important; }
+    [role="listbox"] { background-color: #FFFAF0 !important; }
+    [role="option"] { background-color: #FFFAF0 !important; color: #3E2723 !important; }
+    [role="option"]:hover { background-color: #E6DCCF !important; }
     .stButton>button { background-color: #D7CCC8; color: #3E2723 !important; border-radius: 4px; font-weight: bold; width: 100%; }
     
     /* 台本の文字スタイル */
