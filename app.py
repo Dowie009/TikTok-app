@@ -212,9 +212,7 @@ if not curr_df.empty:
     opts = []
     for idx, (i, r) in enumerate(curr_df.iterrows()):
         m = {"UP済":"✅","編集済":"✂️","撮影済":"🎬","台本完":"📝"}.get(r['ステータス'], "⏳")
-        # 選択中の行には🔴、それ以外は⚪を付ける
-        sel_mark = "🔴" if idx == st.session_state.sel_idx else "⚪"
-        opts.append((f"{sel_mark} {m} {r['No']} | {r['公開予定日']} | {r['タイトル'] or '未定'}", i))
+        opts.append((f"{m} {r['No']} | {r['公開予定日']} | {r['タイトル'] or '未定'}", i))
     
     if st.session_state.sel_idx >= len(opts): st.session_state.sel_idx = 0
 
@@ -239,9 +237,6 @@ if not curr_df.empty:
         c_l, c_r = st.columns([1.3, 1])
         with c_l:
             st.subheader("🗓 スケジュール帳")
-            # 現在選択中を表示
-            current_opt = opts[st.session_state.sel_idx][0]
-            st.markdown(f'<div style="background-color:#FFF8E1; border-left:4px solid #E53935; padding:8px 12px; margin-bottom:10px; border-radius:4px;"><strong style="color:#C62828;">📍 選択中：</strong> {current_opt}</div>', unsafe_allow_html=True)
             sel_l = st.radio("選択", [o[0] for o in opts], index=st.session_state.sel_idx, label_visibility="collapsed")
             st.session_state.sel_idx = [o[0] for o in opts].index(sel_l)
         with c_r:
