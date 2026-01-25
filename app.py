@@ -242,8 +242,19 @@ if not curr_df.empty:
             # 現在選択中を表示
             current_opt = opts[st.session_state.sel_idx][0]
             st.markdown(f'<div style="background-color:#FFF8E1; border-left:4px solid #E53935; padding:8px 12px; margin-bottom:10px; border-radius:4px;"><strong style="color:#C62828;">📍 選択中：</strong> {current_opt}</div>', unsafe_allow_html=True)
-            sel_l = st.radio("選択", [o[0] for o in opts], index=st.session_state.sel_idx, label_visibility="collapsed")
-            st.session_state.sel_idx = [o[0] for o in opts].index(sel_l)
+            # 選択中の行を目立たせるためにカスタム表示
+            for idx, (label, row_i) in enumerate(opts):
+                is_selected = idx == st.session_state.sel_idx
+                if is_selected:
+                    # 選択中: 黄色背景+赤い左バー+太字赤文字
+                    if st.button(f"🔴 {label}", key=f"opt_{idx}", use_container_width=True):
+                        st.session_state.sel_idx = idx
+                        st.rerun()
+                else:
+                    # 未選択: 通常表示
+                    if st.button(f"⚪ {label}", key=f"opt_{idx}", use_container_width=True):
+                        st.session_state.sel_idx = idx
+                        st.rerun()
         with c_r:
             row_idx = opts[st.session_state.sel_idx][1]
             row = df.loc[row_idx]
