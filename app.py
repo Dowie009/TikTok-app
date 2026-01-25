@@ -44,6 +44,9 @@ st.markdown("""
     [data-baseweb="radio"][aria-checked="true"] > div:first-child { background-color: #E53935 !important; border-color: #E53935 !important; }
     [data-baseweb="radio"] div { background-color: transparent !important; }
     [data-baseweb="radio"][aria-checked="true"] div:first-child div { background-color: #E53935 !important; }
+    /* サイドバーのラジオボタンも同様に */
+    [data-testid="stSidebar"] [data-baseweb="radio"] > div:first-child { background-color: #FFFAF0 !important; }
+    [data-testid="stSidebar"] [data-baseweb="radio"][aria-checked="true"] > div:first-child { background-color: #E53935 !important; border-color: #E53935 !important; }
     .stButton>button { background-color: #D7CCC8; color: #3E2723 !important; border-radius: 4px; font-weight: bold; width: 100%; }
     
     /* 台本の文字スタイル */
