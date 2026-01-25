@@ -239,6 +239,9 @@ if not curr_df.empty:
         c_l, c_r = st.columns([1.3, 1])
         with c_l:
             st.subheader("🗓 スケジュール帳")
+            # 現在選択中を表示
+            current_opt = opts[st.session_state.sel_idx][0]
+            st.markdown(f'<div style="background-color:#FFF8E1; border-left:4px solid #E53935; padding:8px 12px; margin-bottom:10px; border-radius:4px;"><strong style="color:#C62828;">📍 選択中：</strong> {current_opt}</div>', unsafe_allow_html=True)
             sel_l = st.radio("選択", [o[0] for o in opts], index=st.session_state.sel_idx, label_visibility="collapsed")
             st.session_state.sel_idx = [o[0] for o in opts].index(sel_l)
         with c_r:
