@@ -39,14 +39,30 @@ st.markdown("""
     /* 選択済みの表示部分 */
     [data-baseweb="select"] > div { background-color: #FFFAF0 !important; }
     [data-baseweb="select"] > div > div { color: #3E2723 !important; }
-    /* ラジオボタンのスタイル - 未選択は白、選択中は赤 */
-    [data-baseweb="radio"] > div:first-child { background-color: #FFFAF0 !important; border-color: #A1887F !important; }
-    [data-baseweb="radio"][aria-checked="true"] > div:first-child { background-color: #E53935 !important; border-color: #E53935 !important; }
+    /* ラジオボタンのスタイル - 未選択は白+縁+中央に点、選択中は赤 */
+    [data-baseweb="radio"] > div:first-child {
+        background-color: #FFFAF0 !important;
+        border: 2px solid #A1887F !important;
+        box-shadow: inset 0 0 0 3px #FFFAF0, inset 0 0 0 6px #C0B2A0 !important;
+    }
+    [data-baseweb="radio"][aria-checked="true"] > div:first-child {
+        background-color: #E53935 !important;
+        border-color: #E53935 !important;
+        box-shadow: none !important;
+    }
     [data-baseweb="radio"] div { background-color: transparent !important; }
     [data-baseweb="radio"][aria-checked="true"] div:first-child div { background-color: #E53935 !important; }
     /* サイドバーのラジオボタンも同様に */
-    [data-testid="stSidebar"] [data-baseweb="radio"] > div:first-child { background-color: #FFFAF0 !important; }
-    [data-testid="stSidebar"] [data-baseweb="radio"][aria-checked="true"] > div:first-child { background-color: #E53935 !important; border-color: #E53935 !important; }
+    [data-testid="stSidebar"] [data-baseweb="radio"] > div:first-child {
+        background-color: #FFFAF0 !important;
+        border: 2px solid #A1887F !important;
+        box-shadow: inset 0 0 0 3px #FFFAF0, inset 0 0 0 6px #C0B2A0 !important;
+    }
+    [data-testid="stSidebar"] [data-baseweb="radio"][aria-checked="true"] > div:first-child {
+        background-color: #E53935 !important;
+        border-color: #E53935 !important;
+        box-shadow: none !important;
+    }
     .stButton>button { background-color: #D7CCC8; color: #3E2723 !important; border-radius: 4px; font-weight: bold; width: 100%; }
     
     /* 台本の文字スタイル */
